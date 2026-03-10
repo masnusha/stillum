@@ -6,6 +6,7 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin", "cyrillic"],
   display: "swap",
+  preload: false, // avoids network fetch during CI/Railway build
 });
 
 export const metadata: Metadata = {

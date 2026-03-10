@@ -34,8 +34,7 @@ Claude must prioritize:
 - Framer Motion (For smooth page transitions and micro-interactions)
 
 **Backend & Database (BaaS):**
-- Supabase (PostgreSQL)
-- Supabase GoTrue (Authentication)
+- Supabase (PostgreSQL, Auth: Email, Google, VK)
 
 **Storage:**
 - Supabase Storage (S3-compatible) for `.mp3` files and `.webp` cover arts.

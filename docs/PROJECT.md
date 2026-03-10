@@ -40,8 +40,10 @@ The interface must reflect:
 ## Core Features (MVP)
 
 **1. User Account & Authentication**
-- Email/Password and OAuth (Telegram/Google) via Supabase.
-- Minimal public profile: Avatar, Username, and a grid of their Public Playlists.
+- Primary: Standard Email and Password (or Magic Links).
+- OAuth Providers: Google and VK (ВКонтакте) via Auth.js (NextAuth).
+- Apple Sign-in: Placeholder only (UI-only for MVP).
+- No forced social links to preserve privacy.
 
 **2. Personal Audio Cloud (The Foundation)**
 - Users can upload `.mp3` or `.wav` files.
@@ -83,13 +85,15 @@ The design should feel: Expensive, hypnotic, modern, and clean.
 - **Frontend:** Next.js (App Router), TypeScript.
 - **Styling:** Tailwind CSS, Framer Motion.
 - **State Management:** Zustand (Crucial for the global audio player).
-- **Backend/DB:** Supabase (PostgreSQL, GoTrue Auth, Storage).
-- **Deployment target:** Vercel.
+- **Authentication:** Auth.js (NextAuth.js).
+- **Backend/DB:** PostgreSQL (hosted on Railway) with Prisma ORM.
+- **Storage:** S3-Compatible Object Storage.
+- **Deployment target:** Railway.
 
 ## Development Principle
 The architecture must prioritize:
 1. **Audio Stability:** The music must never stop when clicking a link.
 2. **UI Polish:** Spacing, alignment, and blur effects must be pixel-perfect.
-3. **Type Safety:** Strict TypeScript models for Database rows.
-4. **Security:** Supabase Row Level Security (RLS) ensuring users only mutate their own data.
+3. **Type Safety:** Strict TypeScript models via Prisma Client.
+4. **Security:** Strict server-side validation and session checking via Auth.js, ensuring users only mutate their own data.
 No premature optimization. Build the core player and the upload flow first.
