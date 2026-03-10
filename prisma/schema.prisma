@@ -22,6 +22,9 @@ model User {
   emailVerified DateTime?
   image         String?
 
+  // Credentials auth — null for OAuth-only users
+  password  String?  @db.Text
+
   // Stillum-specific profile fields
   username  String?  @unique
   createdAt DateTime @default(now())

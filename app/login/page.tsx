@@ -1,14 +1,21 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useState, useId } from "react";
+import Link from "next/link";
 
-// ─── Icons ───────────────────────────────
+// ─── Icons ────────────────────────────────
 
 function GoogleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 18 18"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"
         fill="#4285F4"
@@ -29,146 +36,248 @@ function GoogleIcon() {
   );
 }
 
-function VKIcon() {
+function EyeIcon({ open }: { open: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.033-1-1.49-1.135-1.744-1.135-.356 0-.458.102-.458.593v1.575c0 .424-.135.678-1.253.678-1.846 0-3.896-1.118-5.335-3.202C5.029 10.818 4.012 8.687 4.012 8.183c0-.254.102-.491.593-.491h1.744c.44 0 .61.203.78.677.864 2.49 2.303 4.675 2.896 4.675.22 0 .322-.102.322-.66V9.721c-.068-1.186-.695-1.287-.695-1.71 0-.203.169-.407.44-.407h2.744c.373 0 .508.203.508.643v3.473c0 .372.169.508.271.508.22 0 .407-.136.813-.542 1.253-1.406 2.151-3.574 2.151-3.574.119-.254.322-.491.763-.491h1.744c.525 0 .644.27.525.643-.22 1.017-2.354 4.031-2.354 4.031-.186.305-.254.44 0 .78.186.254.796.779 1.203 1.253.745.847 1.32 1.558 1.473 2.05.17.49-.085.745-.576.745z" />
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {open ? (
+        <>
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      ) : (
+        <>
+          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+          <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+          <line x1="2" y1="2" x2="22" y2="22" />
+        </>
+      )}
     </svg>
   );
 }
 
-// ─── Provider Button ──────────────────────
+// ─── Input ────────────────────────────────
 
-interface ProviderButtonProps {
-  provider: "google" | "vk";
-  icon: React.ReactNode;
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
-  isLoading: boolean;
-  onClick: () => void;
+  error?: string;
 }
 
-function ProviderButton({
-  icon,
-  label,
-  isLoading,
-  onClick,
-}: ProviderButtonProps) {
+function Input({ label, error, id, ...props }: InputProps) {
   return (
-    <button
-      onClick={onClick}
-      disabled={isLoading}
-      className="group relative flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-5 py-3.5 text-sm font-medium text-gray-200 transition-all duration-150 hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <span className="flex-shrink-0">{icon}</span>
-      <span>{isLoading ? "Подключение..." : label}</span>
-    </button>
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-xs font-medium tracking-wide text-white/40 uppercase">
+        {label}
+      </label>
+      <input
+        id={id}
+        {...props}
+        className={[
+          "w-full rounded-xl border bg-white/5 px-4 py-3 text-sm text-white placeholder-white/20",
+          "outline-none transition-all duration-150",
+          "focus:border-white/25 focus:bg-white/8",
+          error ? "border-red-500/50" : "border-white/8",
+          props.className ?? "",
+        ].join(" ")}
+      />
+      <AnimatePresence>
+        {error && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="text-xs text-red-400/80"
+          >
+            {error}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
 // ─── Page ─────────────────────────────────
 
 export default function LoginPage() {
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const emailId = useId();
+  const passwordId = useId();
 
-  async function handleSignIn(provider: string) {
-    setLoadingProvider(provider);
-    await signIn(provider, { callbackUrl: "/" });
-    // setLoadingProvider(null) — no need, page will redirect
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState<"google" | "credentials" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGoogle() {
+    setIsLoading("google");
+    await signIn("google", { callbackUrl: "/" });
+  }
+
+  async function handleCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) return;
+
+    setIsLoading("credentials");
+    setError(null);
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("Неверный email или пароль.");
+      setIsLoading(null);
+      return;
+    }
+
+    // Success — redirect to library
+    window.location.href = "/";
   }
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#050A15] px-4">
-      {/* Background ambient glow */}
+      {/* Ambient glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 70% 50% at 50% 35%, rgba(255,255,255,0.03) 0%, transparent 70%)",
+            "radial-gradient(ellipse 80% 55% at 50% 30%, rgba(255,255,255,0.028) 0%, transparent 70%)",
         }}
       />
 
-      {/* Login card */}
       <motion.div
-        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         className="relative z-10 w-full max-w-sm"
       >
-        {/* Glassmorphism card */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+        {/* ── Glassmorphism card ── */}
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl">
 
-          {/* Wordmark + beam */}
-          <div className="mb-8 flex flex-col items-center gap-0 select-none">
-            {/* Mini light beam */}
+          {/* Wordmark */}
+          <div className="mb-7 flex flex-col items-center select-none">
+            {/* Light beam */}
             <div aria-hidden className="mb-4 flex flex-col items-center">
-              <div
-                style={{
-                  width: 1,
-                  height: 32,
-                  background:
-                    "linear-gradient(to bottom, transparent, rgba(255,255,255,0.5))",
-                }}
-              />
-              <div
-                style={{
-                  width: 1,
-                  height: 12,
-                  background: "rgba(255,255,255,0.85)",
-                  boxShadow:
-                    "0 0 6px 2px rgba(255,255,255,0.3), 0 0 18px 6px rgba(255,255,255,0.1)",
-                }}
-              />
-              <div
-                style={{
-                  width: 1,
-                  height: 24,
-                  background:
-                    "linear-gradient(to bottom, rgba(255,255,255,0.5), transparent)",
-                }}
-              />
+              <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom, transparent, rgba(255,255,255,0.45))" }} />
+              <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.88)", boxShadow: "0 0 5px 2px rgba(255,255,255,0.28), 0 0 16px 5px rgba(255,255,255,0.09)" }} />
+              <div style={{ width: 1, height: 20, background: "linear-gradient(to bottom, rgba(255,255,255,0.45), transparent)" }} />
+            </div>
+            <Link href="/" className="text-xl font-extralight tracking-[0.3em] text-white uppercase focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 rounded">
+              Stillum
+            </Link>
+          </div>
+
+          {/* ── Google button ── */}
+          <button
+            onClick={handleGoogle}
+            disabled={isLoading !== null}
+            className="group flex w-full items-center justify-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm font-medium text-gray-200 transition-all duration-150 hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <GoogleIcon />
+            {isLoading === "google" ? "Подключение..." : "Продолжить с Google"}
+          </button>
+
+          {/* ── Divider ── */}
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.07]" />
+            <span className="text-[10px] font-medium tracking-widest text-white/20 uppercase">или</span>
+            <div className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          {/* ── Credentials form ── */}
+          <form onSubmit={handleCredentials} className="flex flex-col gap-4" noValidate>
+            <Input
+              id={emailId}
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoading !== null}
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={passwordId} className="text-xs font-medium tracking-wide text-white/40 uppercase">
+                Пароль
+              </label>
+              <div className="relative">
+                <input
+                  id={passwordId}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading !== null}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pr-11 text-sm text-white placeholder-white/20 outline-none transition-all duration-150 focus:border-white/25 focus:bg-white/[0.08] disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 transition-colors duration-150 hover:text-white/60 focus-visible:outline-none"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
             </div>
 
-            <h1 className="text-2xl font-extralight tracking-[0.3em] text-white uppercase">
-              Stillum
-            </h1>
-            <p className="mt-2 text-xs font-light tracking-[0.2em] text-white/25 uppercase">
-              Your music. Uninterrupted.
-            </p>
-          </div>
+            {/* Error */}
+            <AnimatePresence>
+              {error && (
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400"
+                >
+                  {error}
+                </motion.p>
+              )}
+            </AnimatePresence>
 
-          {/* Divider */}
-          <div className="mb-6 h-px w-full bg-white/8" />
+            <button
+              type="submit"
+              disabled={isLoading !== null || !email || !password}
+              className="mt-1 w-full rounded-xl bg-white/90 py-3 text-sm font-medium text-[#050A15] transition-all duration-150 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              {isLoading === "credentials" ? "Вход..." : "Войти"}
+            </button>
+          </form>
 
-          {/* Heading */}
-          <p className="mb-5 text-center text-sm text-gray-400">
-            Войди, чтобы продолжить
-          </p>
-
-          {/* Provider buttons */}
-          <div className="flex flex-col gap-3">
-            <ProviderButton
-              provider="google"
-              icon={<GoogleIcon />}
-              label="Продолжить с Google"
-              isLoading={loadingProvider === "google"}
-              onClick={() => handleSignIn("google")}
-            />
-            <ProviderButton
-              provider="vk"
-              icon={<VKIcon />}
-              label="Продолжить с ВКонтакте"
-              isLoading={loadingProvider === "vk"}
-              onClick={() => handleSignIn("vk")}
-            />
-          </div>
-
-          {/* Legal note */}
-          <p className="mt-6 text-center text-[10px] leading-relaxed text-white/20">
-            Входя, вы принимаете условия использования.<br />
-            Ваши данные защищены и не передаются третьим лицам.
+          {/* Footer */}
+          <p className="mt-6 text-center text-[11px] leading-relaxed text-white/20">
+            Нет аккаунта?{" "}
+            <Link
+              href="/register"
+              className="text-white/40 underline-offset-2 hover:text-white/70 hover:underline transition-colors duration-150"
+            >
+              Создать
+            </Link>
           </p>
         </div>
+
+        {/* Legal */}
+        <p className="mt-4 text-center text-[10px] leading-relaxed text-white/15">
+          Входя, вы принимаете условия использования Stillum.
+        </p>
       </motion.div>
     </main>
   );
