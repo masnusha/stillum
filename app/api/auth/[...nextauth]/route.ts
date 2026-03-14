@@ -1,5 +1,3 @@
-import { handlers } from "@/auth";
+import NextAuth from "@/auth";
 
-// Auth.js v5 — App Router handler
-// Delegates all /api/auth/* requests to the Auth.js engine.
-export const { GET, POST } = handlers;
+export { NextAuth as GET, NextAuth as POST };

@@ -1,5 +1,7 @@
+// ─────────────────────────────────────────────────────────────────────────────
 // Stillum – Prisma Schema
-// Prisma v5 + PostgreSQL (Railway) + Auth.js v5
+// Architecture: docs/ARCHITECTURE.md | docs/AUTH_ARCHITECTURE.md
+// ─────────────────────────────────────────────────────────────────────────────
 
 generator client {
   provider = "prisma-client-js"
@@ -10,34 +12,64 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─────────────────────────────────────────
-// AUTH.JS v5 REQUIRED MODELS
-// https://authjs.dev/getting-started/adapters/prisma
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH.JS MODELS  (Required by @auth/prisma-adapter)
+// ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(uuid())
   name          String?
-  email         String?   @unique
+  email         String    @unique
   emailVerified DateTime?
   image         String?
 
-  // Credentials auth — null for OAuth-only users
-  password  String?  @db.Text
-
   // Stillum-specific profile fields
-  username  String?  @unique
+  username     String? @unique
+  passwordHash String?
+  avatarUrl    String?
+  bannerUrl    String? // profile banner / hero background
+  bio          String?
+  isSuspended  Boolean @default(false)
+
+  // Subscription & role
+  plan        String  @default("FREE") // "FREE" | "PLUS"
+  planSince   DateTime?
+  role        String  @default("USER")  // "USER" | "ARTIST"
+  statusEmoji String? // custom emoji for PLUS users (e.g. "🎧")
+
+  // Social links
+  telegramLink     String?
+  vkLink           String?
+  yandexMusicLink  String?
+  customLink       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts  Account[]
-  sessions  Session[]
-  tracks    Track[]
-  playlists Playlist[]
+  // Auth.js relations
+  accounts Account[]
+  sessions Session[]
+
+  // Business relations
+  tracks        Track[]
+  playlists     Playlist[]
+  albums        Album[]
+  reports       Report[]        @relation("ReporterReports")
+  searchHistory SearchHistory[]
+
+  // Social graph
+  following Follow[] @relation("Follower")
+  followers Follow[] @relation("Following")
+
+  // Promo codes redeemed
+  promoCodes PromoCode[]
+
+  @@index([email])
+  @@index([username])
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String  @id @default(uuid())
   userId            String
   type              String
   provider          String
@@ -49,8 +81,6 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -58,12 +88,10 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           String   @id @default(uuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -76,50 +104,204 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// ─────────────────────────────────────────
-// STILLUM DOMAIN MODELS
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// BUSINESS MODELS
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Track {
-  id        String   @id @default(cuid())
-  userId    String
-  artist    String   @db.VarChar(50)
-  title     String   @db.VarChar(100)
-  audioPath String
-  coverPath String?
-  duration  Int? // seconds
-  isPublic  Boolean  @default(false)
+  // Identity
+  id      String @id @default(uuid())
+  ownerId String
+
+  // Metadata (ID3 tags — sanitised server-side before save)
+  title       String
+  artist      String
+  albumName   String?  // raw ID3 album tag from uploaded file
+  genre       String?
+  year        String?  // kept for backwards-compat; UI uses releaseDate
+  releaseDate String?
+  recordLabel String?
+  buyLink     String?
+  isExplicit  Boolean @default(false)
+
+  // Album relation (null for regular user tracks)
+  albumId String?
+  album   Album?  @relation(fields: [albumId], references: [id], onDelete: SetNull)
+
+  // Storage (S3 URLs; filenames are always UUIDs — never original filenames)
+  audioUrl String
+  coverUrl String?
+
+  // Playback
+  duration Int // seconds
+
+  // Access control — Zero Trust gate
+  isPublic Boolean @default(false)
+
   createdAt DateTime @default(now())
 
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   playlistTracks PlaylistTrack[]
 
-  @@index([userId])
-  @@index([isPublic])
+  @@index([ownerId])
 }
 
 model Playlist {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String   @db.VarChar(100)
-  coverPath String?
-  isPublic  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  // Identity
+  id      String @id @default(uuid())
+  ownerId String
 
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Display
+  name        String
+  description String?
+  coverUrl    String?
+
+  // Access control
+  isPublic Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   playlistTracks PlaylistTrack[]
 
-  @@index([userId])
-  @@index([isPublic])
+  @@index([ownerId])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTIST RELEASES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Album {
+  id         String   @id @default(cuid())
+  artistId   String
+
+  // Display
+  title      String
+  coverImage String?
+
+  // Release type: "SINGLE" | "EP" | "ALBUM"
+  type       String   @default("ALBUM")
+
+  // Release metadata
+  releaseDate      String?  // e.g. "2026-03-14"
+  featuredArtists  String?  // feat. artists (plain text)
+  genre            String?
+  language         String?
+  label            String?  // record label or copyright line
+
+  isPublic   Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  artist     User     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  tracks     Track[]
+
+  @@index([artistId])
+}
+
+// Join table: connects Tracks → Playlists with explicit ordering
 model PlaylistTrack {
+  id         String   @id @default(uuid())
   playlistId String
   trackId    String
+  position   Int // ORDER BY position ASC for playback queue
   addedAt    DateTime @default(now())
 
   playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
   track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
-  @@id([playlistId, trackId])
+  // A track can appear in a playlist only once
+  @@unique([playlistId, trackId])
+  @@index([playlistId])
+  @@index([trackId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOCIAL GRAPH
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower",  fields: [followerId],  references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH HISTORY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  targetId  String
+  type      String   // "USER" | "TRACK"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetId, type])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMO CODES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PromoCode {
+  id       String  @id @default(cuid())
+  code     String  @unique // format: XXXX-XXXX-XXXX (stored uppercase)
+  isActive Boolean @default(true)
+
+  usedAt   DateTime?
+  usedById String?
+  usedBy   User?     @relation(fields: [usedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([code])
+  @@index([usedById])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODERATION  (DMCA / Informational Intermediary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ReportTargetType {
+  TRACK
+  PLAYLIST
+  USER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+model Report {
+  id String @id @default(uuid())
+
+  // Nullable: anonymous reporters are allowed (ACCESS_RULES.md §4)
+  reporterId String?
+
+  targetType ReportTargetType
+  targetId   String
+  reason     String
+
+  // Admin-controlled; default PENDING until reviewed
+  status ReportStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  reporter User? @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: SetNull)
 }

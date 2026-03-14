@@ -1,56 +1,39 @@
 @import "tailwindcss";
 
-@theme inline {
-  --color-background: #050A15;
-  --color-foreground: #f1f5f9;
-  --color-surface: rgba(255, 255, 255, 0.04);
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-accent: rgba(255, 255, 255, 0.9);
-
-  --font-sans: var(--font-inter), "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  color-scheme: dark;
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+  --font-neue: "Neue Haas Grotesk Display Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 body {
-  background-color: #050A15;
-  color: #f1f5f9;
-  font-family: var(--font-sans);
-  min-height: 100dvh;
-  overflow-x: hidden;
+  background-color: #030712;
+  color: white;
 }
 
 ::selection {
-  background-color: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-::-webkit-scrollbar {
-  width: 4px;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* ── Scrollbar hide utility ─────────────────────────────────────────────── */
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
+/* ── Equalizer animation (used in TrackList active track indicator) ─────── */
+@keyframes equalizer {
+  0%, 100% { transform: scaleY(0.25); }
+  50%       { transform: scaleY(1); }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+@theme inline {
+  --animate-equalizer: equalizer 0.75s ease-in-out infinite;
 }

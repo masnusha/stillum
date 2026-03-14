@@ -1,64 +1,255 @@
-# Stillum – UX/UI Flow & Interaction Architecture
+# Stillum – UX Flow (Passwordless & Audio-First)
 
-## Overview
-This document defines the aesthetic rules, global audio player logic, and core user journeys for Stillum. 
-Claude MUST use these guidelines to construct the UI components and Framer Motion animations. The goal is a hypnotic, uninterrupted, and premium user experience.
+Stillum is not a social network.
+It is a private digital audio space.
 
-## 1. The Global Audio Player (CRITICAL)
-The most important technical and UX requirement of Stillum is **uninterrupted audio playback**.
+Authentication must feel effortless and modern.
+No passwords. No friction.
+Listening must be uninterrupted.
 
-### Architecture:
-- **Hidden Audio Element:** Use a single, hidden HTML5 `<audio>` element managed at the root layout level (`app/layout.tsx`), tied to a global Zustand store.
-- **Custom UI:** NEVER use the native browser `controls` attribute. Build a custom, aesthetic player bar that sits fixed at the bottom of the viewport or floats like a dynamic island.
-- **Strict SPA Navigation:** Claude MUST use Next.js `<Link>` components for ALL internal routing. NEVER use standard `<a>` tags or `window.location.href`, as this will trigger a full page reload and kill the audio.
+---
 
-### Player States:
-- **Idle:** Hidden or completely minimized if no track is in the queue.
-- **Active:** Displays `Artist — Title`, current time, duration, play/pause, next/prev, and a minimal progress bar.
-- **Aesthetic:** The player background MUST use glassmorphism (`backdrop-blur-xl`, `bg-white/5`, `border-t border-white/10`) to let underlying page content softly blur through as the user scrolls.
+# 1. Landing Page
 
-## 2. Design System & Tailwind Recipes
-Stillum is dark, premium, and clean. Claude must rely on these specific Tailwind recipes:
+User sees:
+- Minimalist Logo (Light beam)
+- Short manifesto: "Your private audio cloud."
+- Primary CTA: "Enter Stillum"
 
-### Backgrounds & Surfaces
-- **App Background:** Deep dark `#050A15` or `bg-slate-950`. No solid black (`#000000`) unless for deep contrast.
-- **Cards/Containers:** `bg-white/5` with `hover:bg-white/10` for interactive elements.
-- **Glassmorphism:** `backdrop-blur-md bg-white/5 border border-white/10`. Use this for sticky headers, modals, and the global player.
+Scrolling reveals:
+- What Stillum is (Aesthetic music storage).
+- Privacy positioning (No takedowns in your private library).
+- How sharing works (Curated aesthetic playlists).
 
-### Typography (Inter / SF Pro)
-- **Primary Text (Titles):** `text-gray-100 font-medium tracking-tight`.
-- **Secondary Text (Artists, Meta):** `text-gray-400 text-sm font-normal`.
-- **Rule of Display:** Tracks must ALWAYS be rendered cleanly. The layout must handle long text gracefully using `truncate`.
+No public content preview.
+No trending tracks.
+No global search.
 
-### Accents & Lighting
-- **Active/Brand Accents:** Pure white (`text-white`) with a subtle text-shadow or `box-shadow` to mimic the light beam from the Stillum logo (e.g., a 1px vertical glowing line to indicate the currently playing track).
+---
 
-## 3. Core User Journeys
+# 2. Authentication (Unified Flow)
 
-### Flow A: The Upload & Metadata Process
-1. **Action:** User clicks "Upload" or drags a `.mp3`/`.wav` file.
-2. **Local Parsing:** Use a library like `music-metadata-browser` to instantly parse ID3 tags (Cover Art, Artist, Title) *before* uploading to the server.
-3. **Verification UI:** Present the user with a clean form showing the extracted data. 
-4. **Enforcement:** The user MUST confirm the track is in the `Artist — Title` format. If ID3 tags are missing, require manual input.
-5. **Upload & Feedback:** Show a minimal, elegant progress spinner. Upon success, add smoothly to the top of the user's library without a page reload.
 
-### Flow B: Playback & Queue Management
-1. **Action:** User clicks a track card.
-2. **State Update:** The `onClick` handler fires an action to the Zustand store: `playTrack(track, contextQueue)`.
-3. **Animation:** The global player bar slides up from the bottom (using Framer Motion). The clicked track card gets a subtle glowing active state.
+There is no separation between Sign Up and Sign In.
 
-### Flow C: Playlist Creation & "The Shareable Card"
-1. **Action:** User selects tracks and creates a playlist.
-2. **Aesthetic Generation:** The playlist cover should ideally be an intelligent collage of the first 4 track covers, heavily blurred, or a user-uploaded image.
-3. **Share Intent:** When clicking "Share", trigger a modal that displays a perfectly framed, Instagram-ready UI Card of the playlist. 
+User sees:
+**Title:** Enter your email
+**Input:** Email address
+**Primary button:** Continue
 
-## 4. Animation & Micro-interactions (Framer Motion)
-Animations must be "expensive" — meaning slow, deliberate, and smooth. Avoid bouncy, elastic, or overly fast transitions.
-- **Page Transitions:** Use `<AnimatePresence>` for subtle fade-ins (`opacity: 0` to `opacity: 1`, duration `0.3s`, ease `easeOut`) when navigating between profiles and playlists.
-- **Hover States:** Buttons and cards should slightly lift (`translate-y-[-2px]`) or glow (`bg-white/10`) with a transition duration of `150ms`.
-- **Loading States:** Use pulse animations (skeleton loaders) with `bg-white/5` instead of generic spinning circles where possible.
+**Separator:** or
 
-## 5. Mobile / PWA Considerations
-- The UI must be fully responsive. 
-- On mobile, the global player bar should adapt into a tap-to-expand component (like Apple Music's mobile player).
-- Ensure tap targets (buttons) are at least `44x44px` for touch accuracy.
+**Buttons:**
+- Continue with Google
+- (Continue with VK / Apple – later stage)
+
+---
+
+# 3. Magic Link Flow (Email)
+
+1. User enters email.
+2. Server generates:
+   - One-time secure token.
+   - 10–15 minute expiration.
+3. Email sent: "Access your Stillum cloud."
+4. User clicks link.
+5. Server validates:
+   - Token exists.
+   - Not expired.
+   - Not used.
+6. Session created via Auth.js.
+7. Token marked as used.
+
+No password creation.
+No password reset emails.
+No password storage vulnerabilities.
+
+---
+
+# 4. OAuth Flow (Google)
+
+1. User selects Google provider.
+2. Redirect to Google secure portal.
+3. On success:
+   - Receive provider ID & verified email.
+4. If email exists: Attach provider to existing user seamlessly.
+5. If new user: Create new account.
+6. Redirect to Onboarding.
+
+---
+
+# 5. First-Time Onboarding
+
+If user has no username:
+
+**Screen Title:** Define your identity
+
+**Fields:**
+- Username (required)
+- Avatar (optional)
+- Bio (optional)
+
+**Validation:**
+- Username uniqueness.
+- Lowercase, alphanumeric.
+
+After submit → Redirect to empty Library.
+
+---
+
+# 6. First Upload (Zero-to-Value)
+
+User sees: "Your cloud is empty."
+
+**Action:** Drag & Drop audio files (`.mp3`, `.wav`).
+1. Client instantly parses ID3 tags (Artist, Title, Cover).
+2. Files upload to S3 securely.
+3. Tracks appear in the Library beautifully formatted as `Artist — Title`.
+
+After first upload → Persistent Audio Player appears docked at the bottom.
+
+---
+
+# 7. Main Dashboard (The Library)
+
+
+**Layout:**
+
+**Left Sidebar:**
+- User avatar + username
+- My Library (All Tracks)
+- Playlists
+- + Create Playlist
+
+**Main Area:**
+- Track list / Cover grid.
+- Strictly formatted text.
+
+**Bottom (Global):**
+- SPA Audio Player (Play, Pause, Progress, Volume).
+- Never reloads during navigation.
+
+**Minimal.**
+No social metrics.
+No notifications feed.
+
+---
+
+# 8. My Library (Track Management)
+
+Owner can:
+- Play tracks.
+- Edit metadata (Title, Artist).
+- Add tracks to Playlists.
+- Delete tracks (permanently removes from S3 and all playlists).
+
+---
+
+# 9. Playlists (Curated Collections)
+
+Owner can:
+- Create new playlist.
+- Drag & drop to reorder tracks.
+- Toggle visibility: `Private` (default) or `Public`.
+- Generate aesthetic Share Card for Instagram/Telegram.
+
+---
+
+# 10. Inside Playlist (Owner View)
+
+Owner sees:
+
+**Header:**
+- Playlist Name & Cover Art (auto-collage or custom).
+- Share Button (Toggle Public/Private).
+- Settings.
+
+**Content:**
+- Track list with play buttons.
+- Drag handles for reordering.
+- Remove track from playlist.
+
+---
+
+# 11. Inside Playlist (Viewer / Public View)
+
+If a playlist is `Public` and link is shared:
+
+Viewer sees:
+**Header:**
+- Playlist name.
+- Uploader's username (small, subtle).
+- Report button (DMCA).
+
+**Content:**
+- Listen to tracks.
+- Continuous playback.
+
+Viewer cannot:
+- See the uploader's private tracks.
+- See other playlists unless explicitly shared.
+- Edit or reorder tracks.
+- Leave comments or likes.
+
+---
+
+# 12. Sharing Flow
+
+Owner clicks Share on a Playlist.
+
+**Options:**
+- Toggle `isPublic` to ON.
+- Copy beautiful short link.
+- Download vertical UI Card for Stories.
+
+**Revocation:**
+- Owner toggles `isPublic` to OFF.
+- All existing shared links instantly return a 404/Private error. No complex token management needed for MVP, just a strict boolean gate.
+
+---
+
+# 13. Reactions & Social Metrics
+
+**REMOVED.**
+- Listening is a private, emotional experience.
+- No visible like counters.
+- No view counters.
+- No public engagement metrics to prevent herd behavior and comparison.
+
+---
+
+# 14. Reporting (Legal Compliance)
+
+User can report:
+- Public Playlist
+- Specific Public Track (Copyright infringement)
+
+**Flow:**
+- Select reason (e.g., DMCA / Illegal content).
+- Submit.
+
+Reports are stored for Admin review.
+If approved -> Admin triggers "Soft Takedown" (`isPublic` set to false).
+Invisible to other users.
+
+---
+
+# 15. Profile Visibility
+
+User profile (`/user/username`) is visible only if they have at least one `Public` playlist.
+Displays: Avatar, Username, Bio, and a grid of Public Playlists.
+
+Profiles without public playlists return a 404 to strangers.
+No searchable public directory.
+
+---
+
+# 16. Security & UX Principles
+
+- **Zero Trust:** All track access validated server-side.
+- **Continuous Audio:** Zustand state manager ensures music never stops during navigation.
+- **Calm Interface:** Deep dark backgrounds, glassmorphism, slow animations.
+- **No Gamification:** No followers, no likes, no algorithms.
+
+Stillum must feel:
+**Private. Intentional. Controlled. Premium.**

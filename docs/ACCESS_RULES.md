@@ -1,93 +1,153 @@
-# Stillum – Database Architecture & Access Rules
+# Stillum – Access & Moderation Rules (Zero Trust)
 
-## Overview
-This document defines the PostgreSQL database schema and Supabase Row Level Security (RLS) policies for Stillum. 
-Claude MUST use this as the absolute source of truth when generating database migrations, types, and querying logic.
-The backend follows a zero-trust model: The client is never trusted. All access control is enforced at the database level via Supabase RLS.
+This document defines the strict access control list (ACL), moderation, and data deletion rules for Stillum.
+Stillum is a privacy-first audio cloud. 
+All access must be heavily validated on the server. There are no exceptions.
 
-## 1. Database Schema
+---
 
-### Table: `profiles`
-Extends the default Supabase `auth.users` table.
-- `id` (uuid, primary key, references auth.users)
-- `username` (text, unique, nullable)
-- `avatar_url` (text, nullable)
-- `created_at` (timestamp)
+# 1. Track Access Rules (Audio Cloud)
 
-### Table: `tracks`
-Stores metadata for uploaded audio files.
-- `id` (uuid, primary key, default gen_random_uuid())
-- `user_id` (uuid, references profiles.id, not null)
-- `artist` (text, not null) - Extracted from ID3 or manually entered.
-- `title` (text, not null) - Extracted from ID3 or manually entered.
-- `audio_path` (text, not null) - Path in the Supabase Storage bucket.
-- `cover_path` (text, nullable) - Path to the extracted cover art.
-- `duration` (integer, nullable) - Duration in seconds.
-- `is_public` (boolean, default false) - The core of the legal intermediary model.
-- `created_at` (timestamp)
+Tracks are the physical audio files uploaded to the server.
 
-### Table: `playlists`
-User-curated collections of tracks.
-- `id` (uuid, primary key, default gen_random_uuid())
-- `user_id` (uuid, references profiles.id, not null)
-- `title` (text, not null)
-- `cover_path` (text, nullable)
-- `is_public` (boolean, default false)
-- `created_at` (timestamp)
+**Owner (Uploader) can:**
+- Play the track.
+- Edit metadata (Title, Artist).
+- Add to any owned playlist.
+- Toggle `isPublic` status.
+- Permanently delete the track.
 
-### Table: `playlist_tracks`
-Junction table mapping tracks to playlists.
-- `playlist_id` (uuid, references playlists.id, on delete cascade)
-- `track_id` (uuid, references tracks.id, on delete cascade)
-- `added_at` (timestamp)
-- Primary Key: (playlist_id, track_id)
+**Viewer (Anyone else) can:**
+- Play the track ONLY IF `isPublic == true` OR if the track is inside a Playlist where `Playlist.isPublic == true`.
+- View the metadata.
 
-## 2. Row Level Security (RLS) Policies
+**Server MUST protect against:**
+- IDOR: A user guessing a `track_id` must receive a 404 (Not Found) if `isPublic == false` and they are not the owner.
+- Direct S3 bucket access (audio files must be streamed securely or accessed via signed URLs/proxies).
 
-Claude MUST implement the following RLS policies in Supabase SQL migrations. **No table should have RLS disabled.**
+---
 
-### `profiles` Policies
-- **SELECT:** Public (Anyone can view profiles to see usernames/avatars).
-- **INSERT:** Triggered automatically by Supabase Auth (Trigger on auth.users).
-- **UPDATE:** Only the user can update their own profile (`auth.uid() = id`).
-- **DELETE:** Restricted (Users cannot delete their own profile directly via client logic; handled by Edge Functions if needed).
+# 2. Playlist Access Rules
 
-### `tracks` Policies
-- **SELECT:** - Owner can read: `auth.uid() = user_id`
-  - Public can read: `is_public = true`
-- **INSERT:** Authenticated users only. `user_id` must match `auth.uid()`.
-- **UPDATE:** - Only the owner can update (`auth.uid() = user_id`).
-  - *Exception:* Admins/System can force `is_public = false` for DMCA takedowns.
-- **DELETE:** Only the owner can delete (`auth.uid() = user_id`).
+Playlists are curated collections of tracks.
 
-### `playlists` Policies
-- **SELECT:** - Owner can read: `auth.uid() = user_id`
-  - Public can read: `is_public = true`
-- **INSERT/UPDATE/DELETE:** Only the owner (`auth.uid() = user_id`).
+**Owner can:**
+- View, play, rename, and delete the playlist.
+- Add or remove tracks.
+- Change track order (position).
+- Toggle `isPublic` to share via URL.
 
-### `playlist_tracks` Policies
-- **SELECT:** - Users can read if they own the playlist: `EXISTS (SELECT 1 FROM playlists WHERE id = playlist_id AND user_id = auth.uid())`
-  - OR if the playlist is public: `EXISTS (SELECT 1 FROM playlists WHERE id = playlist_id AND is_public = true)`
-- **INSERT/DELETE:** - Only the owner of the playlist can add/remove tracks: `EXISTS (SELECT 1 FROM playlists WHERE id = playlist_id AND user_id = auth.uid())`
+**Viewer can:**
+- View and play the playlist ONLY IF `isPublic == true`.
 
-## 3. Storage Buckets & Policies
+**Server MUST protect against:**
+- Manipulated `playlist_id` in API requests.
+- Unauthorized users attempting to push a new track ID into someone else's playlist array.
 
-Supabase Storage will have two buckets: `audio` and `images`.
+---
 
-### `audio` Bucket
-- **Upload (INSERT):** Authenticated users only. File path must be structured as `user_id/uuid.mp3`.
-- **Read (SELECT):** - Users can read their own files.
-  - Public can read files linked to tracks where `is_public = true`.
-- **Delete/Update:** Only the owner (`auth.uid() = user_id` in path).
-- **Constraints:** MIME types limited to `audio/mpeg`, `audio/wav`, `audio/mp3`. Max size 15MB.
+# 3. Reactions & Social Metrics
 
-### `images` Bucket
-- Used for avatars and track/playlist covers.
-- **Upload:** Authenticated users only.
-- **Read:** Publicly accessible.
-- **Constraints:** MIME types `image/jpeg`, `image/png`, `image/webp`. Max size 2MB.
+**EXPLICITLY BANNED.**
+- Viewers cannot react to tracks or playlists.
+- Owners cannot see play counts or listen metrics.
+- Reason: Stillum is a personal aesthetic space, not an engagement-driven social network. No comparison between users is allowed.
 
-## 4. Engineering Directives for Claude
-- Always generate TypeScript types based on this schema (using Supabase CLI or manual interfaces).
-- Never fetch `SELECT *`. Always specify the exact columns needed for the UI to reduce payload size.
-- When querying tracks for a public playlist, ensure the UI gracefully handles cases where a track's `is_public` status was changed to false by the owner or DMCA after it was added to the playlist.
+---
+
+# 4. Reporting & Moderation (DMCA Soft Takedown)
+
+Users can report:
+1. A Public Playlist.
+2. A Public Track (e.g., Copyright Infringement / Illegal Content).
+3. A User Profile.
+
+**Report must contain:**
+- Reporter ID (if authenticated) or anonymous session trace.
+- Target type (TRACK / PLAYLIST / USER).
+- Target ID.
+- Reason (e.g., DMCA, Abusive Metadata).
+
+**Moderation Execution (Admin Only):**
+- If a track is infringing, Admin executes a **Soft Takedown**: `Track.isPublic` is forced to `false`.
+- The track disappears from all public links, but remains in the original uploader's private library.
+- We act as an Informational Intermediary: we do not delete user files unless explicitly illegal (not just copyrighted).
+
+---
+
+# 5. Automated Content Screening (Upload Phase)
+
+Server MUST perform the following checks before saving to S3:
+- **MIME Type Validation:** Reject anything that is not `audio/mpeg` or `audio/wav`.
+- **File Size Limit:** Reject files > 15MB to prevent storage abuse.
+- **ID3 Tag Stripping:** Automatically strip HTML, scripts, and hidden characters from Artist/Title metadata.
+- **File Renaming:** Never save the user's original filename. Always generate a UUID.
+
+Stillum does NOT:
+- Run recommendation algorithms.
+- Scan private tracks for engagement data.
+
+---
+
+# 6. Username Rules
+
+Usernames must:
+- Be alphanumeric, lowercase, no spaces (e.g., `a-z`, `0-9`, `_`).
+- Respect character limits (min 3, max 20).
+- Pass a basic blacklist filter (no reserved words like `admin`, `system`, or severe profanity).
+
+Goal: Prevent impersonation and harmful identifiers, while keeping profiles minimal.
+
+---
+
+# 7. Rate Limiting
+
+Rate limits MUST apply to:
+- Magic Link / Login generation.
+- Audio file uploads (e.g., max 50 tracks per hour per user).
+- Playlist creation.
+- Report submission.
+
+---
+
+# 8. Critical Security Rules
+
+Server must ALWAYS verify in every API route / Server Action:
+- `session.user.id` exists.
+- `target_id` (Track/Playlist) belongs to `session.user.id` OR is explicitly marked `isPublic: true`.
+
+Never trust:
+- Client-submitted `ownerId`.
+- Client-submitted roles.
+- Hidden form fields.
+
+---
+
+# 9. Data Deletion Rules
+
+**Track Deletion (by Owner):**
+- Delete the physical `.mp3` file from S3.
+- Cascade delete all `PlaylistTrack` connection rows (removes the track from all playlists it was added to).
+- Delete the `Track` record from the DB.
+
+**Playlist Deletion (by Owner):**
+- Delete all `PlaylistTrack` connection rows.
+- Delete the `Playlist` record.
+- **Crucial:** DO NOT delete the physical `Track` files. Playlists are just visual folders.
+
+**User Deletion:**
+- Cascade delete all Playlists, Tracks, and S3 files owned by the user.
+- Terminate all active sessions.
+
+---
+
+# 10. Philosophy Reminder
+
+Stillum is privacy-first.
+Moderation and access control exist ONLY to:
+- Protect the user's private audio cloud.
+- Reduce legal risk for the platform (DMCA compliance).
+- Prevent illegal activity and storage abuse.
+- Maintain system integrity.
+
+There is no public ranking, no follower system, no engagement competition.
