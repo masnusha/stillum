@@ -54,7 +54,6 @@ export const authOptions: NextAuthOptions = {
       server: process.env.EMAIL_SERVER ?? "smtp://localhost:25",
       from: process.env.EMAIL_FROM ?? "Stillum <noreply@stillum.app>",
       sendVerificationRequest,
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
 

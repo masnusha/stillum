@@ -8,9 +8,17 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { getPresignedUrl, getImagePresignedUrl, createTrackRecord, type TrackMetadata } from "@/app/actions/track";
 import { addTrackToPlaylist } from "@/app/actions/playlist";
 import TrackMetadataModal from "./TrackMetadataModal";
+
+// ─── Client-side validation constants ────────────────────────────────────────
+
+const ALLOWED_AUDIO_TYPES = new Set([
+  "audio/mpeg", "audio/wav", "audio/x-wav", "audio/flac", "audio/x-flac",
+]);
+const MAX_AUDIO_BYTES = 256 * 1024 * 1024; // 256 MB
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,8 +59,16 @@ function useUploader(playlistId?: string) {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const router = useRouter();
 
-  /** Step 1: file selected/dropped — open metadata modal */
+  /** Step 1: file selected/dropped — validate then open metadata modal */
   const selectFile = (file: File) => {
+    if (!ALLOWED_AUDIO_TYPES.has(file.type)) {
+      toast.error("Неподдерживаемый формат. Поддерживаются: MP3, WAV, FLAC.");
+      return;
+    }
+    if (file.size > MAX_AUDIO_BYTES) {
+      toast.error("Файл слишком большой. Максимум 256 МБ.");
+      return;
+    }
     setPendingFile(file);
     setState("pending-modal");
     setError("");
@@ -76,6 +92,7 @@ function useUploader(playlistId?: string) {
     if ("error" in audioPresign) {
       setState("error");
       setError(audioPresign.error);
+      toast.error(audioPresign.error);
       return;
     }
     setProgress(15);
@@ -87,6 +104,7 @@ function useUploader(playlistId?: string) {
       if ("error" in coverPresign) {
         setState("error");
         setError(coverPresign.error);
+        toast.error(coverPresign.error);
         return;
       }
       setProgress(25);
@@ -197,7 +215,7 @@ export default function UploadDropzone({ variant, playlistId }: Props) {
     <input
       ref={inputRef}
       type="file"
-      accept="audio/mpeg,audio/wav,.mp3,.wav"
+      accept="audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,.mp3,.wav,.flac"
       className="sr-only"
       onChange={handleChange}
       aria-hidden
@@ -221,7 +239,7 @@ export default function UploadDropzone({ variant, playlistId }: Props) {
         <button
           onClick={openPicker}
           disabled={state === "uploading"}
-          className="flex items-center gap-2 bg-white text-[#030712] text-[13px] font-semibold px-5 py-2 rounded-full hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-transform duration-150"
+          className="btn-shimmer flex items-center gap-2 text-[#030712] text-[13px] font-semibold px-5 py-2 rounded-full hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {state === "uploading" ? (
             <Loader2 size={13} className="animate-spin shrink-0" />
@@ -348,7 +366,7 @@ export default function UploadDropzone({ variant, playlistId }: Props) {
 
         {state === "idle" && (
           <p className="text-[11px] text-white/15 tracking-wide uppercase">
-            .mp3 &nbsp;·&nbsp; .wav &nbsp;·&nbsp; up to 15 MB
+            .mp3 &nbsp;·&nbsp; .wav &nbsp;·&nbsp; .flac &nbsp;·&nbsp; up to 256 MB
           </p>
         )}
       </div>

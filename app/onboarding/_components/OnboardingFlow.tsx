@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, ImagePlus, ArrowRight, Check, Loader2 } from "lucide-react";
+import { Camera, ArrowRight, Check, Loader2 } from "lucide-react";
 import ImageCropperModal from "@/components/modals/ImageCropperModal";
 import { getImageUploadUrl, completeOnboarding, type OnboardingResult } from "@/app/actions/onboarding";
 
@@ -34,22 +34,6 @@ function ProgressDots({ step, total }: { step: number; total: number }) {
         />
       ))}
     </div>
-  );
-}
-
-// ─── StepHint ─────────────────────────────────────────────────────────────────
-
-function StepHint({ message }: { message: string }) {
-  return (
-    <motion.p
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1,  y: 0  }}
-      exit={{    opacity: 0,  y: -4 }}
-      transition={{ duration: 0.2 }}
-      className="text-sm text-white/35 text-center mt-1"
-    >
-      {message}
-    </motion.p>
   );
 }
 
@@ -93,7 +77,7 @@ function SkipBtn({ onClick }: { onClick: () => void }) {
 
 // ─── Image upload helper ──────────────────────────────────────────────────────
 
-async function uploadImage(file: File, type: "avatar" | "banner"): Promise<string> {
+async function uploadImage(file: File, type: "avatar"): Promise<string> {
   const { uploadUrl, publicUrl } = await getImageUploadUrl(type, file.type);
   await fetch(uploadUrl, {
     method:  "PUT",
@@ -103,13 +87,6 @@ async function uploadImage(file: File, type: "avatar" | "banner"): Promise<strin
   return publicUrl;
 }
 
-// ─── Crop config per image type ───────────────────────────────────────────────
-
-const CROP_CONFIG = {
-  avatar: { aspect: 1, cropShape: "round" as const },
-  cover:  { aspect: 3, cropShape: "rect"  as const },
-};
-
 // ─── OnboardingFlow ───────────────────────────────────────────────────────────
 
 export default function OnboardingFlow() {
@@ -117,22 +94,19 @@ export default function OnboardingFlow() {
   const [direction, setDirection] = useState(1);
 
   // Step data
-  const [nickname,   setNickname]  = useState("");
+  const [nickname,   setNickname]   = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [coverFile,  setCoverFile]  = useState<File | null>(null);
   const [bio,        setBio]        = useState("");
 
   // Previews
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [coverPreview,  setCoverPreview]  = useState<string | null>(null);
 
   // Crop modal state
-  const [cropTarget,  setCropTarget]  = useState<"avatar" | "cover" | null>(null);
-  const [cropSrc,     setCropSrc]     = useState<string | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   // Error + loading
-  const [stepErrors,  setStepErrors]  = useState<Partial<Record<number, string>>>({});
-  const [uploading,   setUploading]   = useState(false);
+  const [stepErrors,  setStepErrors]   = useState<Partial<Record<number, string>>>({});
+  const [uploading,   setUploading]    = useState(false);
   const [isPending,   startTransition] = useTransition();
 
   function setStepError(s: number, msg: string | null) {
@@ -143,21 +117,12 @@ export default function OnboardingFlow() {
   }
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef  = useRef<HTMLInputElement>(null);
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const USERNAME_RE = /^[a-zA-Z0-9_.]{3,30}$/;
-  const step1Valid = USERNAME_RE.test(nickname.trim());
-  const step2Valid = avatarFile !== null;
-  const step3Valid = coverFile  !== null;
-  const step4Valid = bio.trim().length > 0;
-
-  const hints: Record<number, string> = {
-    1: "Введите никнейм от 3 символов, чтобы продолжить",
-    2: "Загрузите и обрежьте аватарку, чтобы перейти дальше",
-    3: "Загрузите и обрежьте фон профиля, чтобы перейти дальше",
-    4: "Расскажите немного о себе, чтобы завершить",
-  };
+  const step1Valid  = USERNAME_RE.test(nickname.trim());
+  const step2Valid  = avatarFile !== null;
+  const step3Valid  = bio.trim().length > 0;
 
   // ── Navigation ─────────────────────────────────────────────────────────────
 
@@ -169,56 +134,38 @@ export default function OnboardingFlow() {
 
   // ── Image crop flow ────────────────────────────────────────────────────────
 
-  function handleImagePick(file: File, target: "avatar" | "cover") {
+  function handleImagePick(file: File) {
     const url = URL.createObjectURL(file);
-    // Revoke any previous crop src (not the preview — that stays until Apply)
     setCropSrc(url);
-    setCropTarget(target);
-    // Reset the file input so the same file can be re-selected after cancel
-    if (target === "avatar" && avatarInputRef.current) avatarInputRef.current.value = "";
-    if (target === "cover"  && coverInputRef.current)  coverInputRef.current.value  = "";
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
   }
 
   function handleApplyCrop(file: File) {
-    if (!cropTarget) return;
     const url = URL.createObjectURL(file);
-
-    if (cropTarget === "avatar") {
-      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-      setAvatarFile(file);
-      setAvatarPreview(url);
-    } else {
-      if (coverPreview) URL.revokeObjectURL(coverPreview);
-      setCoverFile(file);
-      setCoverPreview(url);
-    }
-
-    // Revoke the raw source URL and close modal
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarFile(file);
+    setAvatarPreview(url);
     if (cropSrc) URL.revokeObjectURL(cropSrc);
     setCropSrc(null);
-    setCropTarget(null);
   }
 
   function handleCancelCrop() {
     if (cropSrc) URL.revokeObjectURL(cropSrc);
     setCropSrc(null);
-    setCropTarget(null);
   }
 
   // ── Finish ─────────────────────────────────────────────────────────────────
 
   async function handleFinish() {
-    clearStepError(4);
+    clearStepError(3);
     setUploading(true);
 
     let finalAvatar: string | null = null;
-    let finalBanner: string | null = null;
 
     try {
       if (avatarFile) finalAvatar = await uploadImage(avatarFile, "avatar");
-      if (coverFile)  finalBanner = await uploadImage(coverFile,  "banner");
     } catch {
-      setStepError(4, "Ошибка загрузки изображения. Попробуй еще раз.");
+      setStepError(3, "Ошибка загрузки изображения. Попробуй еще раз.");
       setUploading(false);
       return;
     }
@@ -230,7 +177,6 @@ export default function OnboardingFlow() {
         username:  nickname,
         bio,
         avatarUrl: finalAvatar,
-        bannerUrl: finalBanner,
       });
       if ("error" in result) {
         if (result.field === "username") {
@@ -238,7 +184,7 @@ export default function OnboardingFlow() {
           setDirection(-1);
           setStep(1);
         } else {
-          setStepError(4, result.error);
+          setStepError(3, result.error);
         }
       }
     });
@@ -253,16 +199,16 @@ export default function OnboardingFlow() {
     /* ── Step 1: Nickname ─────────────────────────────────────────────── */
     <div key={1} className="flex flex-col items-center gap-6 w-full max-w-md">
       <div className="text-center">
-        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 1 из 4</p>
+        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 1 из 3</p>
         <h2 className="text-3xl font-bold text-white mb-2">Как тебя зовут?</h2>
-        <p className="text-white/40 text-[15px]">Выбери уникальный никнейм — это твой публичный идентификатор</p>
+        <p className="text-white/40 text-[15px]">Выбери уникальное имя — по нему тебя будут находить другие слушатели.</p>
       </div>
 
       <input
         type="text"
         value={nickname}
         onChange={(e) => setNickname(e.target.value)}
-        placeholder="твой_никнейм"
+        placeholder="ryousaku"
         maxLength={30}
         autoFocus
         className="bg-transparent text-center text-4xl font-black text-white placeholder:text-white/20 focus:outline-none w-full border-b border-white/[0.08] focus:border-white/30 transition-colors pb-3"
@@ -277,16 +223,13 @@ export default function OnboardingFlow() {
         <PrimaryBtn onClick={() => goTo(2)} disabled={!step1Valid}>
           Далее <ArrowRight size={16} strokeWidth={2.5} />
         </PrimaryBtn>
-        <AnimatePresence>
-          {!step1Valid && <StepHint message={hints[1]} />}
-        </AnimatePresence>
       </div>
     </div>,
 
     /* ── Step 2: Avatar ───────────────────────────────────────────────── */
     <div key={2} className="flex flex-col items-center gap-6 w-full max-w-md">
       <div className="text-center">
-        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 2 из 4</p>
+        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 2 из 3</p>
         <h2 className="text-3xl font-bold text-white mb-2">Добавь своё лицо</h2>
         <p className="text-white/40 text-[15px]">Аватар помогает другим тебя найти</p>
       </div>
@@ -298,7 +241,7 @@ export default function OnboardingFlow() {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) handleImagePick(f, "avatar");
+          if (f) handleImagePick(f);
         }}
       />
 
@@ -334,73 +277,13 @@ export default function OnboardingFlow() {
             Далее <ArrowRight size={16} strokeWidth={2.5} />
           </PrimaryBtn>
         </div>
-        <AnimatePresence>
-          {!step2Valid && <StepHint message={hints[2]} />}
-        </AnimatePresence>
       </div>
     </div>,
 
-    /* ── Step 3: Cover / Banner ───────────────────────────────────────── */
+    /* ── Step 3: Bio ──────────────────────────────────────────────────── */
     <div key={3} className="flex flex-col items-center gap-6 w-full max-w-lg">
       <div className="text-center">
-        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 3 из 4</p>
-        <h2 className="text-3xl font-bold text-white mb-2">Выбери фон профиля</h2>
-        <p className="text-white/40 text-[15px]">Фоновое изображение отображается в шапке профиля</p>
-      </div>
-
-      <input
-        ref={coverInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleImagePick(f, "cover");
-        }}
-      />
-
-      <button
-        type="button"
-        onClick={() => coverInputRef.current?.click()}
-        className="w-full aspect-[3/1] rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center cursor-pointer hover:bg-white/[0.07] transition-colors overflow-hidden relative group"
-      >
-        {coverPreview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverPreview} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-white/25 group-hover:text-white/50 transition-colors">
-            <ImagePlus size={28} strokeWidth={1} />
-            <span className="text-[12px]">Выбрать изображение</span>
-          </div>
-        )}
-        {coverPreview && (
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <ImagePlus size={22} strokeWidth={1.5} className="text-white" />
-          </div>
-        )}
-      </button>
-
-      <p className="text-[11px] uppercase tracking-widest text-white/20">
-        Рекомендуемое разрешение: 1500x500px (3:1) • Формат: JPG, PNG
-      </p>
-
-      <div className="flex flex-col items-center gap-2 mt-2">
-        <div className="flex gap-3">
-          <SkipBtn onClick={() => goTo(4)} />
-          <PrimaryBtn onClick={() => goTo(4)} disabled={!step3Valid}>
-            Далее <ArrowRight size={16} strokeWidth={2.5} />
-          </PrimaryBtn>
-        </div>
-        <AnimatePresence>
-          {!step3Valid && <StepHint message={hints[3]} />}
-        </AnimatePresence>
-      </div>
-    </div>,
-
-    /* ── Step 4: Bio ──────────────────────────────────────────────────── */
-    <div key={4} className="flex flex-col items-center gap-6 w-full max-w-lg">
-      <div className="text-center">
-        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 4 из 4</p>
+        <p className="text-[11px] tracking-[0.2em] text-white/30 uppercase mb-3">Шаг 3 из 3</p>
         <h2 className="text-3xl font-bold text-white mb-2">Пара слов о тебе</h2>
         <p className="text-white/40 text-[15px]">Необязательно, но так тебя лучше найдут</p>
       </div>
@@ -418,21 +301,18 @@ export default function OnboardingFlow() {
         </span>
       </div>
 
-      {stepErrors[4] && (
-        <p className="text-[13px] text-red-400/80 text-center -mt-2">{stepErrors[4]}</p>
+      {stepErrors[3] && (
+        <p className="text-[13px] text-red-400/80 text-center -mt-2">{stepErrors[3]}</p>
       )}
 
       <div className="flex flex-col items-center gap-2 mt-2">
         <div className="flex gap-3">
           <SkipBtn onClick={handleFinish} />
-          <PrimaryBtn onClick={handleFinish} disabled={!step4Valid} loading={isLoading}>
+          <PrimaryBtn onClick={handleFinish} disabled={!step3Valid} loading={isLoading}>
             {!isLoading && <Check size={15} strokeWidth={2.5} />}
             {isLoading ? "Сохранение…" : "Завершить"}
           </PrimaryBtn>
         </div>
-        <AnimatePresence>
-          {!step4Valid && !isLoading && <StepHint message={hints[4]} />}
-        </AnimatePresence>
       </div>
     </div>,
   ];
@@ -442,7 +322,7 @@ export default function OnboardingFlow() {
 
       {/* Progress indicator */}
       <div className="mb-16">
-        <ProgressDots step={step} total={4} />
+        <ProgressDots step={step} total={3} />
       </div>
 
       {/* Animated step content */}
@@ -463,13 +343,13 @@ export default function OnboardingFlow() {
         </AnimatePresence>
       </div>
 
-      {/* Crop modal — rendered outside stepper so it layers above everything */}
+      {/* Crop modal */}
       <AnimatePresence>
-        {cropSrc && cropTarget && (
+        {cropSrc && (
           <ImageCropperModal
             src={cropSrc}
-            aspect={CROP_CONFIG[cropTarget].aspect}
-            cropShape={CROP_CONFIG[cropTarget].cropShape}
+            aspect={1}
+            cropShape="round"
             onApply={handleApplyCrop}
             onCancel={handleCancelCrop}
           />

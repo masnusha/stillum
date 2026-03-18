@@ -39,17 +39,20 @@ export default async function PlaylistDetailPage({ params }: Props) {
           track: {
             select: {
               id:          true,
+              ownerId:     true,
               title:       true,
               artist:      true,
               duration:    true,
               coverUrl:    true,
               audioUrl:    true,
-              isPublic:    true,
+              isPublic:      true,
+              allowComments: true,
               isExplicit:  true,
               genre:       true,
               releaseDate: true,
               recordLabel: true,
               buyLink:     true,
+              owner: { select: { id: true, username: true, name: true, avatarUrl: true, image: true } },
             },
           },
         },
@@ -63,8 +66,17 @@ export default async function PlaylistDetailPage({ params }: Props) {
 
   const isOwner = playlist.ownerId === session.user.id;
 
-  const ownerName =
-    playlist.owner.username ?? playlist.owner.name ?? "Unknown";
+  const ownerName = playlist.owner.username ?? playlist.owner.name ?? "Unknown";
+
+  // Rename owner → user in each track so TrackRowData is satisfied
+  const playlistWithUser = {
+    ...playlist,
+    ownerName,
+    playlistTracks: playlist.playlistTracks.map((pt) => {
+      const { owner, ...trackRest } = pt.track;
+      return { ...pt, track: { ...trackRest, user: owner } };
+    }),
+  };
 
   return (
     <div className="flex flex-col h-full min-h-full">
@@ -86,7 +98,7 @@ export default async function PlaylistDetailPage({ params }: Props) {
       </header>
 
       <PlaylistDetailClient
-        playlist={{ ...playlist, ownerName }}
+        playlist={playlistWithUser}
         isOwner={isOwner}
       />
     </div>

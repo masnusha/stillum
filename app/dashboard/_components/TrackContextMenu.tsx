@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { deleteTrack } from "@/app/actions/track";
 import { removeTrackFromPlaylist } from "@/app/actions/playlist";
+import { usePlaylistModal } from "@/store/usePlaylistModal";
+import { toast } from "sonner";
 import DeleteConfirmModal from "./DeleteConfirmModal";
 import EditTrackModal, { type TrackForEdit } from "./EditTrackModal";
 
@@ -21,6 +23,7 @@ import EditTrackModal, { type TrackForEdit } from "./EditTrackModal";
 
 interface Track extends TrackForEdit {
   audioUrl: string;
+  artist:   string; // display name — derived from uploader on server, read-only
 }
 
 interface Props {
@@ -69,6 +72,7 @@ function MenuItem({ icon: Icon, label, onClick, destructive }: MenuItemProps) {
 // ─── TrackContextMenu ─────────────────────────────────────────────────────────
 
 export default function TrackContextMenu({ track, alwaysVisible, onDeleted, playlistId }: Props) {
+  const { openModal } = usePlaylistModal();
   const [open, setOpen]               = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal,     setShowEditModal]     = useState(false);
@@ -165,9 +169,11 @@ export default function TrackContextMenu({ track, alwaysVisible, onDeleted, play
     startTransition(async () => {
       const result = await deleteTrack(track.id);
       if (result.error) {
-        console.error("[deleteTrack]", result.error);
+        toast.error("Не удалось удалить трек. Попробуйте ещё раз.");
+        return;
       }
       setShowDeleteConfirm(false);
+      toast.success("Трек полностью удалён из Stillum");
       onDeleted?.();
     });
   };
@@ -239,8 +245,8 @@ export default function TrackContextMenu({ track, alwaysVisible, onDeleted, play
             // Prevent the document mousedown listener from closing the menu when clicking inside.
             onMouseDown={e => e.stopPropagation()}
           >
-            <MenuItem icon={ListEnd}  label="Play Next"       onClick={() => { setOpen(false); }} />
-            <MenuItem icon={ListPlus} label="Add to Playlist" onClick={() => { setOpen(false); }} />
+            <MenuItem icon={ListEnd}  label="Play Next"            onClick={() => { setOpen(false); }} />
+            <MenuItem icon={ListPlus} label="Добавить в плейлист" onClick={() => { setOpen(false); openModal(track.id); }} />
             <Separator />
             <MenuItem icon={Pencil}   label="Edit Info"       onClick={() => { setOpen(false); setShowEditModal(true); }} />
             <MenuItem icon={Download} label="Download"        onClick={handleDownload} />

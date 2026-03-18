@@ -10,6 +10,9 @@ import SidebarNav from "./_components/SidebarNav";
 import Player from "./_components/Player";
 import Logo from "@/components/ui/Logo";
 import SessionProvider from "./_components/SessionProvider";
+import NowPlayingSidebar from "@/components/NowPlayingSidebar";
+import MainContentWrapper from "@/components/MainContentWrapper";
+import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import { Toaster } from "sonner";
 
 // Calling cookies() inside the layout is the canonical Next.js signal that
@@ -41,8 +44,11 @@ export default async function DashboardLayout({
 
   return (
     <SessionProvider>
-    {/* Outer wrapper — fills the whole viewport, clips everything */}
-    <div className="h-screen w-full flex bg-[#030712] overflow-hidden select-none">
+    {/* Outer wrapper — fills the whole viewport.
+        No overflow-hidden here: the sidebar is position:fixed and Framer Motion
+        applies CSS transforms; overflow-hidden on a transformed ancestor would
+        create a new containing block and clip the fixed panel. */}
+    <div className="h-screen w-full flex bg-[#030712] select-none overflow-x-clip">
 
       {/* ── SIDEBAR ─────────────────────────────────────────────────────────── */}
       <aside className="w-60 shrink-0 flex flex-col border-r border-white/[0.03]">
@@ -59,7 +65,7 @@ export default async function DashboardLayout({
 
         {/* Navigation */}
         <div className="flex-1 px-2 overflow-y-auto scrollbar-hide pb-4">
-          <SidebarNav />
+          <SidebarNav role={session.user.role} />
         </div>
 
         {/* Artist CTA — only for ARTIST role */}
@@ -67,7 +73,7 @@ export default async function DashboardLayout({
           <div className="px-3 pb-3">
             <Link
               href="/dashboard/upload"
-              className="w-full bg-white text-black font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] hover:bg-white/90 active:scale-[0.99] transition-all shadow-[0_0_20px_rgba(255,255,255,0.10)]"
+              className="btn-shimmer w-full text-black font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.99]"
             >
               <Mic size={15} strokeWidth={2} />
               Создать релиз
@@ -110,13 +116,20 @@ export default async function DashboardLayout({
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────────────────────── */}
-      {/* pb-24 so content doesn't hide behind the fixed player */}
-      <main className="flex-1 flex flex-col overflow-y-auto pb-24 relative">
+      {/* MainContentWrapper is a client component that reads isSidebarOpen from
+          Zustand and shifts its right margin to avoid the Now Playing panel. */}
+      <MainContentWrapper>
         {children}
-      </main>
+      </MainContentWrapper>
 
       {/* ── GLOBAL AUDIO PLAYER ─────────────────────────────────────────────── */}
       <Player userId={session.user.id!} />
+
+      {/* ── NOW PLAYING SIDEBAR ──────────────────────────────────────────────── */}
+      <NowPlayingSidebar userId={session.user.id!} />
+
+      {/* ── ADD TO PLAYLIST MODAL ────────────────────────────────────────────── */}
+      <AddToPlaylistModal />
 
       {/* ── TOAST NOTIFICATIONS ─────────────────────────────────────────────── */}
       <Toaster

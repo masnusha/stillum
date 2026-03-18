@@ -321,6 +321,12 @@ export async function addTrackToPlaylist(
   });
   if (!track || track.ownerId !== session.user.id) return { error: "Трек не найден" };
 
+  // Duplicate check — reject instead of silently ignoring
+  const already = await prisma.playlistTrack.findUnique({
+    where: { playlistId_trackId: { playlistId, trackId } },
+  });
+  if (already) return { error: "Трек уже в этом плейлисте" };
+
   // Get next position
   const last = await prisma.playlistTrack.findFirst({
     where:   { playlistId },
@@ -329,11 +335,7 @@ export async function addTrackToPlaylist(
   });
   const position = (last?.position ?? -1) + 1;
 
-  await prisma.playlistTrack.upsert({
-    where:  { playlistId_trackId: { playlistId, trackId } },
-    update: {},
-    create: { playlistId, trackId, position },
-  });
+  await prisma.playlistTrack.create({ data: { playlistId, trackId, position } });
 
   revalidatePath(`/dashboard/playlists/${playlistId}`);
   return {};

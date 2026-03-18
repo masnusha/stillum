@@ -11,6 +11,37 @@ import { v4 as uuidv4 } from "uuid";
 
 type Result = { error?: string };
 
+// ─── getUploaderProfile ───────────────────────────────────────────────────────
+
+export type UploaderProfile = {
+  id:          string;
+  name:        string | null;
+  username:    string | null;
+  avatarUrl:   string | null;
+  image:       string | null;
+  isFollowing: boolean;
+};
+
+export async function getUploaderProfile(
+  targetId: string,
+): Promise<UploaderProfile | null> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return null;
+
+  const user = await prisma.user.findUnique({
+    where:  { id: targetId },
+    select: { id: true, name: true, username: true, avatarUrl: true, image: true },
+  });
+  if (!user) return null;
+
+  const follow = await prisma.follow.findUnique({
+    where:  { followerId_followingId: { followerId: session.user.id, followingId: targetId } },
+    select: { id: true },
+  });
+
+  return { ...user, isFollowing: !!follow };
+}
+
 // ─── updateUserProfile ────────────────────────────────────────────────────────
 
 export async function updateUserProfile(data: {
@@ -145,6 +176,13 @@ export async function getBannerPresignedUrl(
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { error: "Unauthorized" };
 
+  const actor = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { plan: true, role: true },
+  });
+  if (!actor || (actor.plan !== "PLUS" && actor.role !== "ARTIST"))
+    return { error: "Смена фона доступна только для Stillum PLUS и ARTIST." };
+
   if (!ALLOWED_IMAGE.has(fileType)) return { error: "Only JPEG, PNG or WebP." };
   if (fileSize > 10 * 1024 * 1024)  return { error: "Banner exceeds 10 MB." };
 
@@ -167,6 +205,13 @@ export async function updateUserBanner(fileKey: string): Promise<Result> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { error: "Unauthorized" };
 
+  const actor = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { plan: true, role: true },
+  });
+  if (!actor || (actor.plan !== "PLUS" && actor.role !== "ARTIST"))
+    return { error: "Смена фона доступна только для Stillum PLUS и ARTIST." };
+
   if (!fileKey.startsWith(`banners/${session.user.id}/`))
     return { error: "Invalid file key." };
 
@@ -178,5 +223,57 @@ export async function updateUserBanner(fileKey: string): Promise<Result> {
   });
 
   revalidatePath("/dashboard/profile");
+  return {};
+}
+
+// ─── removeUserBanner ─────────────────────────────────────────────────────────
+
+export async function removeUserBanner(): Promise<Result> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const actor = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { plan: true, role: true },
+  });
+  if (!actor || (actor.plan !== "PLUS" && actor.role !== "ARTIST"))
+    return { error: "Смена фона доступна только для Stillum PLUS и ARTIST." };
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data:  { bannerUrl: null },
+  });
+
+  revalidatePath("/dashboard/profile");
+  return {};
+}
+
+// ─── downgradeUserPlan ────────────────────────────────────────────────────────
+// Called by Stripe webhook / admin when a subscription expires or is cancelled.
+// Atomically sets plan → FREE and wipes PLUS-only fields from the DB.
+
+export async function downgradeUserPlan(userId: string): Promise<Result> {
+  // Caller must be authenticated admin (or internal webhook); validate upstream.
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const actor = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { role: true },
+  });
+  if (actor?.role !== "ADMIN") return { error: "Forbidden" };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      plan:        "FREE",
+      planSince:   null,
+      bannerUrl:   null,   // revoke premium banner
+      statusEmoji: null,   // revoke premium status emoji
+    },
+  });
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/account");
   return {};
 }

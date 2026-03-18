@@ -137,7 +137,9 @@ function AlbumCard({ id, title, coverImage, type, trackCount }: AlbumPreview) {
         <p className="text-[13px] font-medium text-white/70 group-hover:text-white transition-colors truncate">
           {title}
         </p>
-        <p className="text-[11px] text-white/30 mt-0.5">{trackCount} тр.</p>
+        {type !== "SINGLE" && (
+          <p className="text-[11px] text-white/30 mt-0.5">{trackCount} тр.</p>
+        )}
       </div>
     </Link>
   );
@@ -168,7 +170,9 @@ export default function ProfileClient({ user: initialUser }: Props) {
   const [error,         setError]         = useState<string | null>(null);
   const { update: updateSession }         = useSession();
 
-  const displayName = user.username ?? user.name ?? user.email;
+  const displayName        = user.username ?? user.name ?? user.email;
+  const hasPremiumFeatures = user.plan === "PLUS" || user.role === "ARTIST";
+  const activeBanner       = hasPremiumFeatures ? user.bannerUrl : null;
 
   return (
     <>
@@ -197,10 +201,10 @@ export default function ProfileClient({ user: initialUser }: Props) {
 
           {/* ── Banner ──────────────────────────────────────────────────────────── */}
           <div className="relative w-full h-[280px] shrink-0">
-            {user.bannerUrl ? (
+            {activeBanner ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={user.bannerUrl}
+                src={activeBanner}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"
               />

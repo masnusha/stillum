@@ -11,11 +11,17 @@ import { s3, S3_BUCKET, S3_PUBLIC_BASE } from "@/lib/s3";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ALLOWED_AUDIO_TYPES = new Set(["audio/mpeg", "audio/wav"]);
+const ALLOWED_AUDIO_TYPES = new Set([
+  "audio/mpeg",   // MP3
+  "audio/wav",    // WAV
+  "audio/x-wav",  // WAV (legacy MIME)
+  "audio/flac",   // FLAC
+  "audio/x-flac", // FLAC (legacy MIME)
+]);
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_AUDIO_BYTES = 15 * 1024 * 1024;  // 15 MB
+const MAX_AUDIO_BYTES = 256 * 1024 * 1024; // 256 MB
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;  // 10 MB
-const PRESIGN_TTL = 5 * 60;                // 5 minutes
+const PRESIGN_TTL = 30 * 60;               // 30 minutes (supports large FLAC/WAV)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,13 +35,13 @@ type CreateTrackResult =
 
 export interface TrackMetadata {
   title: string;
-  artist: string;
   genre?: string;
   releaseDate?: string;
   recordLabel?: string;
   buyLink?: string;
   isExplicit?: boolean;
   isPublic?: boolean;
+  allowComments?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -66,13 +72,20 @@ export async function getPresignedUrl(
   if (!session?.user?.id) return { error: "Unauthorized" };
 
   if (!ALLOWED_AUDIO_TYPES.has(fileType))
-    return { error: "Only MP3 and WAV files are supported." };
+    return { error: "Неподдерживаемый формат. Поддерживаются: MP3, WAV, FLAC." };
   if (fileSize > MAX_AUDIO_BYTES)
-    return { error: "File exceeds the 15 MB limit." };
+    return { error: "Файл слишком большой. Максимум 256 МБ." };
   if (!fileName || fileName.length > 260)
     return { error: "Invalid file name." };
 
-  const ext = fileType === "audio/wav" ? "wav" : "mp3";
+  const extMap: Record<string, string> = {
+    "audio/mpeg":   "mp3",
+    "audio/wav":    "wav",
+    "audio/x-wav":  "wav",
+    "audio/flac":   "flac",
+    "audio/x-flac": "flac",
+  };
+  const ext = extMap[fileType] ?? "mp3";
   const fileKey = `audio/${session.user.id}/${uuidv4()}.${ext}`;
   const presignedUrl = await presign(fileKey, fileType);
 
@@ -124,9 +137,20 @@ export async function createTrackRecord(
   if (coverKey && !coverKey.startsWith(`covers/${session.user.id}/`))
     return { error: "Invalid cover key." };
 
+  // Derive artist from the authenticated uploader — never trusted from client.
+  const dbUser = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { username: true, name: true },
+  });
+  const artist = dbUser?.username ?? dbUser?.name ?? "Unknown Artist";
+
+  // Validate title length before sanitizing.
+  const rawTitle = metadata.title?.trim() ?? "";
+  if (!rawTitle)           return { error: "Название не может быть пустым." };
+  if (rawTitle.length > 50) return { error: "Название не может быть длиннее 50 символов." };
+
   // Sanitize all metadata server-side before DB write (SECURITY.md §9).
-  const title       = sanitize(metadata.title)               || "Untitled";
-  const artist      = sanitize(metadata.artist)              || "Unknown Artist";
+  const title       = sanitize(metadata.title, 50)           || "Untitled";
   const genre       = metadata.genre       ? sanitize(metadata.genre, 80)       || undefined : undefined;
   const releaseDate = metadata.releaseDate ? sanitize(metadata.releaseDate, 20) || undefined : undefined;
   const recordLabel = metadata.recordLabel ? sanitize(metadata.recordLabel)     || undefined : undefined;
@@ -148,22 +172,32 @@ export async function createTrackRecord(
   const audioUrl = `${S3_PUBLIC_BASE}/${fileKey}`;
   const coverUrl = coverKey ? `${S3_PUBLIC_BASE}/${coverKey}` : undefined;
 
-  const track = await prisma.track.create({
-    data: {
-      ownerId: session.user.id,
-      title,
-      artist,
-      genre,
-      releaseDate,
-      recordLabel,
-      buyLink,
-      isExplicit,
-      audioUrl,
-      coverUrl,
-      duration: (duration && isFinite(duration) && duration > 0) ? Math.round(duration) : 0,
-      isPublic: Boolean(metadata.isPublic),
-    },
-    select: { id: true },
+  const [track] = await prisma.$transaction(async (tx) => {
+    const created = await tx.track.create({
+      data: {
+        ownerId: session.user.id,
+        title,
+        artist,
+        genre,
+        releaseDate,
+        recordLabel,
+        buyLink,
+        isExplicit,
+        audioUrl,
+        coverUrl,
+        duration: (duration && isFinite(duration) && duration > 0) ? Math.round(duration) : 0,
+        isPublic:      Boolean(metadata.isPublic),
+        allowComments: metadata.allowComments !== false, // default true
+      },
+      select: { id: true },
+    });
+
+    // Auto-add to owner's library — owner always has their track saved.
+    await tx.savedTrack.create({
+      data: { userId: session.user.id, trackId: created.id },
+    });
+
+    return [created];
   });
 
   return { trackId: track.id };
@@ -198,9 +232,13 @@ export async function updateTrack(
   if (newCoverKey && !newCoverKey.startsWith(`covers/${session.user.id}/`))
     return { error: "Invalid cover key." };
 
+  // Validate title length.
+  const rawTitle = metadata.title?.trim() ?? "";
+  if (!rawTitle)            return { error: "Название не может быть пустым." };
+  if (rawTitle.length > 50) return { error: "Название не может быть длиннее 50 символов." };
+
   // Sanitize metadata.
-  const title       = sanitize(metadata.title)               || "Untitled";
-  const artist      = sanitize(metadata.artist)              || "Unknown Artist";
+  const title       = sanitize(metadata.title, 50)           || "Untitled";
   const genre       = metadata.genre       ? sanitize(metadata.genre, 80)       || undefined : undefined;
   const releaseDate = metadata.releaseDate ? sanitize(metadata.releaseDate, 20) || undefined : undefined;
   const recordLabel = metadata.recordLabel ? sanitize(metadata.recordLabel)     || undefined : undefined;
@@ -242,13 +280,13 @@ export async function updateTrack(
     where: { id: trackId },
     data: {
       title,
-      artist,
       genre:       genre       ?? null,
       releaseDate: releaseDate ?? null,
       recordLabel: recordLabel ?? null,
       buyLink:     buyLink     ?? null,
       isExplicit,
-      isPublic: Boolean(metadata.isPublic),
+      isPublic:      Boolean(metadata.isPublic),
+      allowComments: metadata.allowComments !== false,
       ...(coverUrl !== undefined ? { coverUrl } : {}),
     },
   });
@@ -278,8 +316,11 @@ export async function updateTrackMetadata(
   if (!track)                            return { error: "Track not found." };
   if (track.ownerId !== session.user.id) return { error: "Forbidden." };
 
-  const title       = sanitize(data.title)               || "Untitled";
-  const artist      = sanitize(data.artist)              || "Unknown Artist";
+  const rawTitle = data.title?.trim() ?? "";
+  if (!rawTitle)            return { error: "Название не может быть пустым." };
+  if (rawTitle.length > 50) return { error: "Название не может быть длиннее 50 символов." };
+
+  const title       = sanitize(data.title, 50)           || "Untitled";
   const genre       = data.genre       ? sanitize(data.genre, 80)       || null : null;
   const releaseDate = data.releaseDate ? sanitize(data.releaseDate, 20) || null : null;
   const recordLabel = data.recordLabel ? sanitize(data.recordLabel)     || null : null;
@@ -296,7 +337,7 @@ export async function updateTrackMetadata(
 
   await prisma.track.update({
     where: { id: trackId },
-    data: { title, artist, genre, releaseDate, recordLabel, buyLink, isExplicit, isPublic: Boolean(data.isPublic) },
+    data: { title, genre, releaseDate, recordLabel, buyLink, isExplicit, isPublic: Boolean(data.isPublic), allowComments: data.allowComments !== false },
   });
 
   revalidatePath("/dashboard");

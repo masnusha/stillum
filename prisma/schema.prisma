@@ -54,6 +54,8 @@ model User {
   tracks        Track[]
   playlists     Playlist[]
   albums        Album[]
+  comments      Comment[]
+  reactions     Reaction[]
   reports       Report[]        @relation("ReporterReports")
   searchHistory SearchHistory[]
 
@@ -63,6 +65,13 @@ model User {
 
   // Promo codes redeemed
   promoCodes PromoCode[]
+
+  // Notifications
+  notifications       Notification[] @relation("ReceivedNotifications")
+  issuedNotifications Notification[] @relation("IssuedNotifications")
+
+  // Personal library
+  savedTracks SavedTrack[]
 
   @@index([email])
   @@index([username])
@@ -125,8 +134,10 @@ model Track {
   isExplicit  Boolean @default(false)
 
   // Album relation (null for regular user tracks)
-  albumId String?
-  album   Album?  @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  albumId         String?
+  album           Album?  @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  order           Int     @default(0)   // track position within an album
+  featuredArtists String?               // per-track feat. credits
 
   // Storage (S3 URLs; filenames are always UUIDs — never original filenames)
   audioUrl String
@@ -136,12 +147,16 @@ model Track {
   duration Int // seconds
 
   // Access control — Zero Trust gate
-  isPublic Boolean @default(false)
+  isPublic       Boolean @default(false)
+  allowComments  Boolean @default(true)
 
   createdAt DateTime @default(now())
 
   owner          User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   playlistTracks PlaylistTrack[]
+  comments       Comment[]
+  notifications  Notification[]
+  savedBy        SavedTrack[]
 
   @@index([ownerId])
 }
@@ -273,6 +288,50 @@ model PromoCode {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId  String
+  trackId String
+
+  // Self-relation for one level of threading
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  user          User           @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  track         Track          @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  reactions     Reaction[]
+  notifications Notification[]
+
+  @@index([trackId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Reaction {
+  id        String @id @default(cuid())
+  emoji     String // The emoji character itself, e.g. "🔥"
+
+  userId    String
+  commentId String
+
+  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  // One user → one of each emoji per comment
+  @@unique([userId, commentId, emoji])
+  @@index([commentId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MODERATION  (DMCA / Informational Intermediary)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -304,4 +363,53 @@ model Report {
   createdAt DateTime @default(now())
 
   reporter User? @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: SetNull)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSONAL LIBRARY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SavedTrack {
+  id      String   @id @default(cuid())
+  userId  String
+  trackId String
+  savedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+  @@index([userId])
+  @@index([trackId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  NEW_COMMENT
+  REPLY
+  REACTION
+  FOLLOW
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           // Кому пришло уведомление
+  issuerId  String           // Кто совершил действие
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  trackId   String?
+  commentId String?
+  createdAt DateTime         @default(now())
+
+  user    User     @relation("ReceivedNotifications", fields: [userId],    references: [id], onDelete: Cascade)
+  issuer  User     @relation("IssuedNotifications",   fields: [issuerId],  references: [id], onDelete: Cascade)
+  track   Track?   @relation(fields: [trackId],   references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([issuerId])
+  @@index([createdAt])
 }

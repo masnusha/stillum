@@ -34,6 +34,54 @@ body {
   50%       { transform: scaleY(1); }
 }
 
+/* ── Shimmer animation (Artist CTA button in sidebar) ──────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
 @theme inline {
-  --animate-equalizer: equalizer 0.75s ease-in-out infinite;
+  --animate-equalizer:    equalizer 0.75s ease-in-out infinite;
+  --animate-shimmer:      shimmer 3s linear infinite;
+  --animate-shimmer-fast: shimmer 1.5s linear infinite;
+}
+
+/* ── Emoji Picker (em-emoji-picker web component) ───────────────────────── */
+em-emoji-picker {
+  width:            100%  !important;
+  min-width:        220px !important;
+  max-height:       340px !important;
+  --width:          100%;
+  --border-radius:  12px;
+  --category-icon-size: 16px;
+  --font-size:      13px;
+  --color-border:   rgba(255,255,255,0.06);
+  --shadow:         none;
+  border:           1px solid rgba(255,255,255,0.05) !important;
+  background:       rgba(10,13,22,0.97) !important;
+  backdrop-filter:  blur(20px);
+}
+
+/*
+ * .btn-shimmer — applied to the Artist "Создать релиз" CTA in the sidebar.
+ * A slow, flowing light sweep from left to right.
+ */
+.btn-shimmer {
+  background: linear-gradient(
+    105deg,
+    #ffffff  0%,
+    #e8f4ff 35%,
+    #ffffff 50%,
+    #e8f4ff 65%,
+    #ffffff 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+  transition: box-shadow 0.3s ease, transform 0.15s ease;
+}
+
+.btn-shimmer:hover {
+  animation-duration: 1.5s;
+  box-shadow: 0 0 38px rgba(255, 255, 255, 0.28);
 }

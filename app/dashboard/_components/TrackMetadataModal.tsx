@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ImagePlus, ChevronDown, Lock, Globe } from "lucide-react";
+import { X, ImagePlus, ChevronDown, Lock, Globe, MessageSquare, MessageSquareOff } from "lucide-react";
 import type { TrackMetadata } from "@/app/actions/track";
 import { updateTrackMetadata } from "@/app/actions/track";
 import { usePlayerStore } from "@/store/usePlayerStore";
@@ -22,15 +22,15 @@ const GENRES = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TrackEditData {
-  id:          string;
-  title:       string;
-  artist:      string;
-  genre?:       string | null;
-  releaseDate?: string | null;
-  recordLabel?: string | null;
-  buyLink?:     string | null;
-  isExplicit:  boolean;
-  isPublic:    boolean;
+  id:            string;
+  title:         string;
+  genre?:         string | null;
+  releaseDate?:   string | null;
+  recordLabel?:   string | null;
+  buyLink?:       string | null;
+  isExplicit:    boolean;
+  isPublic:      boolean;
+  allowComments: boolean;
 }
 
 type Props =
@@ -83,16 +83,25 @@ interface FieldProps {
   placeholder: string;
   required?: boolean;
   maxLength?: number;
+  showCounter?: boolean;
   type?: string;
 }
 
-function Field({ label, value, onChange, placeholder, required, maxLength = 200, type = "text" }: FieldProps) {
+function Field({ label, value, onChange, placeholder, required, maxLength = 200, showCounter, type = "text" }: FieldProps) {
+  const tooLong = showCounter && maxLength < 500 && value.length > maxLength;
   return (
     <div className="space-y-1.5">
-      <label className="block text-[10px] font-medium tracking-widest uppercase text-white/25">
-        {label}
-        {required && <span className="text-white/35 ml-0.5">*</span>}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="block text-[10px] font-medium tracking-widest uppercase text-white/25">
+          {label}
+          {required && <span className="text-white/35 ml-0.5">*</span>}
+        </label>
+        {showCounter && (
+          <span className={`text-[10px] tabular-nums ${tooLong ? "text-red-400/70" : "text-white/20"}`}>
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
       <input
         type={type}
         value={value}
@@ -101,7 +110,8 @@ function Field({ label, value, onChange, placeholder, required, maxLength = 200,
         required={required}
         maxLength={maxLength}
         autoComplete="off"
-        className="w-full bg-white/[0.02] border border-white/[0.05] focus:border-white/[0.2] focus:bg-white/[0.05] transition-all duration-200 rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder-white/20 outline-none"
+        className={`w-full bg-white/[0.02] border focus:bg-white/[0.05] transition-all duration-200 rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder-white/20 outline-none
+          ${tooLong ? "border-red-400/40 focus:border-red-400/60" : "border-white/[0.05] focus:border-white/[0.2]"}`}
       />
     </div>
   );
@@ -294,6 +304,45 @@ function PrivacyToggle({ checked, onChange }: { checked: boolean; onChange: (v: 
   );
 }
 
+// ─── CommentsToggle ───────────────────────────────────────────────────────────
+
+function CommentsToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between w-full px-4 py-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+      <div className="flex items-center gap-3">
+        {checked
+          ? <MessageSquare    size={16} strokeWidth={1.5} className="shrink-0 text-white/40 transition-all duration-300" />
+          : <MessageSquareOff size={16} strokeWidth={1.5} className="shrink-0 text-white/20 transition-all duration-300" />
+        }
+        <div>
+          <p className={`text-[13px] leading-tight transition-all duration-300 ${checked ? "text-white" : "text-white/60"}`}>
+            {checked ? "Комментарии включены" : "Комментарии отключены"}
+          </p>
+          <p className={`text-[11px] mt-0.5 leading-relaxed transition-all duration-300 ${checked ? "text-white/40" : "text-white/30"}`}>
+            {checked
+              ? "Слушатели смогут оставлять комментарии и реакции под вашим треком."
+              : "Слушатели не смогут оставлять комментарии. Трек доступен только для прослушивания."
+            }
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className="shrink-0 ml-4 relative w-9 h-5 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+        style={{ background: checked ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.07)" }}
+      >
+        <span
+          className="absolute top-[3px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-200"
+          style={{ left: checked ? "calc(100% - 17px)" : "3px" }}
+        />
+      </button>
+    </div>
+  );
+}
+
 // ─── TrackMetadataModal ───────────────────────────────────────────────────────
 
 export default function TrackMetadataModal(props: Props) {
@@ -306,10 +355,7 @@ export default function TrackMetadataModal(props: Props) {
   const [saveError, setSaveError]    = useState<string | null>(null);
 
   const [title,       setTitle]       = useState(
-    isEdit ? props.initialData.title  : titleFromFilename(props.file!.name)
-  );
-  const [artist,      setArtist]      = useState(
-    isEdit ? props.initialData.artist : ""
+    isEdit ? props.initialData.title  : titleFromFilename(props.file!.name).slice(0, 50)
   );
   const [genre,       setGenre]       = useState(
     isEdit ? (props.initialData.genre ?? "")        : ""
@@ -326,8 +372,11 @@ export default function TrackMetadataModal(props: Props) {
   const [isExplicit,  setIsExplicit]  = useState(
     isEdit ? props.initialData.isExplicit : false
   );
-  const [isPublic,    setIsPublic]    = useState(
+  const [isPublic,       setIsPublic]       = useState(
     isEdit ? props.initialData.isPublic : false
+  );
+  const [allowComments,  setAllowComments]  = useState(
+    isEdit ? props.initialData.allowComments : true
   );
 
   // ── Cover state ──────────────────────────────────────────────────────────────
@@ -381,21 +430,23 @@ export default function TrackMetadataModal(props: Props) {
     setCoverPreview(null);
   };
 
-  const canSubmit = title.trim().length > 0 && artist.trim().length > 0 && !isPending;
+  const titleTrimmed  = title.trim();
+  const titleTooLong  = titleTrimmed.length > 50;
+  const canSubmit     = titleTrimmed.length > 0 && !titleTooLong && !isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
 
     const metadata: TrackMetadata = {
-      title:       title.trim(),
-      artist:      artist.trim(),
-      genre:       genre       || undefined,
-      releaseDate: releaseDate.trim() ? toIsoDate(releaseDate.trim()) : undefined,
-      recordLabel: recordLabel.trim() || undefined,
-      buyLink:     buyLink.trim()     || undefined,
+      title:         title.trim(),
+      genre:         genre       || undefined,
+      releaseDate:   releaseDate.trim() ? toIsoDate(releaseDate.trim()) : undefined,
+      recordLabel:   recordLabel.trim() || undefined,
+      buyLink:       buyLink.trim()     || undefined,
       isExplicit,
       isPublic,
+      allowComments,
     };
 
     if (isEdit) {
@@ -448,27 +499,28 @@ export default function TrackMetadataModal(props: Props) {
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="px-5 pt-5 pb-4 space-y-4">
+              <div className="px-5 pt-5 pb-4 space-y-5">
 
-                {/* ── Cover + Title / Artist ──────────────────────────── */}
+                {/* ── Hero: Cover + Title ──────────────────────────────── */}
                 {!isEdit ? (
-                  <div className="flex gap-4 items-end">
-                    <div className="shrink-0 space-y-1.5">
-                      <p className="text-[10px] font-medium tracking-widest uppercase text-white/25">Cover</p>
+                  <div className="grid grid-cols-[auto_1fr] gap-5 items-start">
+                    {/* Cover */}
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-[10px] font-medium tracking-widest uppercase text-white/40">Cover</p>
                       <input ref={coverInputRef} type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                         className="sr-only" onChange={handleCoverChange} aria-label="Select cover image" />
                       <div className="relative">
                         <button type="button" onClick={() => coverInputRef.current?.click()}
-                          className={`relative w-[88px] h-[88px] rounded-xl overflow-hidden border flex flex-col items-center justify-center gap-1.5 group transition-all duration-200
-                            ${coverPreview ? "border-white/[0.08] hover:border-white/[0.2]" : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.16]"}`}
+                          className={`relative w-[92px] h-[92px] rounded-xl overflow-hidden border flex flex-col items-center justify-center gap-1.5 group transition-all duration-200
+                            ${coverPreview ? "border-white/[0.08] hover:border-white/[0.2]" : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.14]"}`}
                           aria-label={coverPreview ? "Change cover" : "Add cover"}>
                           {coverPreview ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={coverPreview} alt="Cover" className="w-full h-full object-cover" />
                           ) : (
                             <>
-                              <ImagePlus size={18} strokeWidth={1.25} className="text-white/20 group-hover:text-white/45 transition-colors" />
-                              <span className="text-[9px] font-medium tracking-wider uppercase text-white/20 group-hover:text-white/45 transition-colors">Add Cover</span>
+                              <ImagePlus size={18} strokeWidth={1.25} className="text-white/20 group-hover:text-white/40 transition-colors" />
+                              <span className="text-[9px] font-medium tracking-wider uppercase text-white/20 group-hover:text-white/40 transition-colors">Add cover</span>
                             </>
                           )}
                         </button>
@@ -480,45 +532,60 @@ export default function TrackMetadataModal(props: Props) {
                           </button>
                         )}
                       </div>
-                      <p className="text-[9px] text-white/15 text-center">3000 × 3000 px</p>
+                      <p className="text-[9px] text-white/20 text-center">3000 × 3000 px</p>
                     </div>
-                    <div className="flex-1 space-y-3">
-                      <Field label="Title"  value={title}  onChange={setTitle}  placeholder="Track title"  required />
-                      <Field label="Artist" value={artist} onChange={setArtist} placeholder="Artist name" required />
+
+                    {/* Title — underline style, no box */}
+                    <div className="flex flex-col gap-1.5 pt-0.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-medium tracking-widest uppercase text-white/40">
+                          Title<span className="text-white/30 ml-0.5">*</span>
+                        </label>
+                        <span className={`text-[10px] tabular-nums ${titleTooLong ? "text-red-400/70" : "text-white/20"}`}>
+                          {title.length}/50
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        placeholder="Track title"
+                        required
+                        maxLength={50}
+                        autoComplete="off"
+                        className={`w-full bg-transparent pb-2 text-[16px] font-medium text-white placeholder-white/20
+                                   outline-none transition-colors duration-200 border-b
+                                   ${titleTooLong ? "border-red-400/50" : "border-white/[0.1] focus:border-white/30"}`}
+                      />
+                      <p className="text-[11px] text-white/20 mt-0.5">Имя артиста берётся из вашего профиля автоматически.</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <Field label="Title"  value={title}  onChange={setTitle}  placeholder="Track title"  required />
-                    <Field label="Artist" value={artist} onChange={setArtist} placeholder="Artist name" required />
-                  </div>
+                  <Field label="Title" value={title} onChange={setTitle} placeholder="Track title" required maxLength={50} showCounter />
                 )}
 
-                {/* ── Optional fields ─────────────────────────────────── */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-white/[0.04]" />
-                    <span className="text-[9px] text-white/15 uppercase tracking-widest font-medium">Optional</span>
-                    <div className="flex-1 h-px bg-white/[0.04]" />
-                  </div>
+                {/* ── Divider ─────────────────────────────────────────── */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-white/[0.04]" />
+                  <span className="text-[9px] text-white/20 uppercase tracking-widest font-medium">Optional</span>
+                  <div className="flex-1 h-px bg-white/[0.04]" />
+                </div>
 
-                  {/* Genre + Release Date */}
+                {/* ── Optional fields ──────────────────────────────────── */}
+                <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <GenreSelect value={genre} onChange={setGenre} />
                     <DateField value={releaseDate} onChange={setReleaseDate} />
                   </div>
-
-                  {/* Record Label */}
                   <Field label="Record Label" value={recordLabel} onChange={setRecordLabel} placeholder="e.g. XL Recordings" />
+                  <Field label="Buy Link"     value={buyLink}     onChange={setBuyLink}     placeholder="https://…" maxLength={500} />
+                </div>
 
-                  {/* Buy Link */}
-                  <Field label="Buy Link" value={buyLink} onChange={setBuyLink} placeholder="https://…" maxLength={500} />
-
-                  {/* Explicit */}
-                  <ExplicitCheckbox checked={isExplicit} onChange={setIsExplicit} />
-
-                  {/* Privacy */}
-                  <PrivacyToggle checked={isPublic} onChange={setIsPublic} />
+                {/* ── Toggles ──────────────────────────────────────────── */}
+                <div className="space-y-2.5">
+                  <ExplicitCheckbox checked={isExplicit}     onChange={setIsExplicit} />
+                  <PrivacyToggle    checked={isPublic}       onChange={setIsPublic} />
+                  <CommentsToggle   checked={allowComments}  onChange={setAllowComments} />
                 </div>
               </div>
 
@@ -528,9 +595,9 @@ export default function TrackMetadataModal(props: Props) {
               )}
 
               {/* Submit */}
-              <div className="px-5 pb-5">
+              <div className="px-5 pb-5 pt-1">
                 <button type="submit" disabled={!canSubmit}
-                  className="w-full bg-white text-[#050A15] text-[13px] font-semibold py-2.5 rounded-xl hover:bg-white/90 active:scale-[0.99] disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 flex items-center justify-center gap-2">
+                  className="w-full bg-white text-[#050A15] text-[13px] font-semibold py-3 rounded-xl hover:bg-white/90 active:scale-[0.99] disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 flex items-center justify-center gap-2">
                   {isPending && (
                     <span className="w-3.5 h-3.5 border border-[#050A15]/40 border-t-transparent rounded-full animate-spin" />
                   )}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Play, Pause, Music } from "lucide-react";
 import { usePlayerStore, type PlayerTrack } from "@/store/usePlayerStore";
 import type { TrackRowData } from "@/app/dashboard/_components/TrackList";
@@ -20,7 +21,11 @@ function toPlayerTrack(t: TrackRowData): PlayerTrack {
     audioUrl:    t.audioUrl,
     coverUrl:    t.coverUrl,
     duration:    t.duration,
-    isExplicit:  t.isExplicit,
+    isExplicit:    t.isExplicit,
+    isPublic:      t.isPublic,
+    allowComments: t.allowComments,
+    ownerId:     t.ownerId,
+    user:        t.user,
     genre:       t.genre,
     releaseDate: t.releaseDate,
     recordLabel: t.recordLabel,
@@ -80,16 +85,20 @@ function TrackRow({
 
       {/* Meta */}
       <div className="flex-1 min-w-0">
-        <p className={`text-[13px] font-medium truncate transition-colors ${
-          isActive ? "text-white" : "text-white/80 group-hover:text-white"
-        }`}>
+        <Link
+          href={`/dashboard/track/${track.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className={`block text-[13px] font-medium truncate transition-colors hover:underline underline-offset-2 ${
+            isActive ? "text-white" : "text-white/80 group-hover:text-white"
+          }`}
+        >
           {track.title}
           {track.isExplicit && (
             <span className="ml-1.5 text-[9px] font-semibold bg-white/10 text-white/40 px-1 py-0.5 rounded uppercase tracking-wide align-middle">
               E
             </span>
           )}
-        </p>
+        </Link>
         <p className="text-[12px] text-white/40 truncate mt-0.5">{track.artist}</p>
       </div>
 

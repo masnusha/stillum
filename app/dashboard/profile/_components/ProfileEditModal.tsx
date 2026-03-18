@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Camera, Check, Loader2, Lock, Sparkles } from "lucide-react";
+import { X, Camera, Check, Loader2, Lock, Sparkles, Trash2 } from "lucide-react";
 import { TelegramIcon, VkIcon, FilledMusicIcon, FilledGlobeIcon } from "./SocialIcons";
 import {
   updateProfile,
@@ -11,6 +11,7 @@ import {
   updateUserAvatar,
   getBannerPresignedUrl,
   updateUserBanner,
+  removeUserBanner,
 } from "@/app/actions/user";
 import ImageCropperModal    from "@/components/modals/ImageCropperModal";
 import UserNameWithBadges   from "@/components/ui/UserNameWithBadges";
@@ -106,7 +107,8 @@ interface Props {
 }
 
 export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
-  const isPlus = user.plan === "PLUS";
+  const isPlus          = user.plan === "PLUS";
+  const canChangeBanner = user.plan === "PLUS" || user.role === "ARTIST";
 
   // Form fields
   const [username,        setUsername]        = useState(user.username        ?? "");
@@ -129,6 +131,9 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
 
+  // Banner removal flag (deferred — applied on save)
+  const [bannerRemoved, setBannerRemoved] = useState(false);
+
   // Crop modal state
   const [cropTarget, setCropTarget] = useState<"avatar" | "banner" | null>(null);
   const [cropSrc,    setCropSrc]    = useState<string | null>(null);
@@ -144,7 +149,7 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
   const { update: updateSession } = useSession();
 
   const displayedAvatar = avatarPreview ?? user.avatarUrl;
-  const displayedBanner = bannerPreview ?? user.bannerUrl;
+  const displayedBanner = bannerRemoved ? null : (bannerPreview ?? user.bannerUrl);
   const displayName     = username || user.name || user.email;
 
   const initials = displayName
@@ -188,6 +193,13 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
     setCropTarget(null);
   }
 
+  function handleRemoveBanner() {
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+    setBannerFile(null);
+    setBannerPreview(null);
+    setBannerRemoved(true);
+  }
+
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
@@ -207,7 +219,10 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
         if (save.error) { setError(save.error); setSaving(false); return; }
       }
 
-      if (bannerFile) {
+      if (bannerRemoved && !bannerFile) {
+        const save = await removeUserBanner();
+        if (save.error) { setError(save.error); setSaving(false); return; }
+      } else if (bannerFile) {
         const res = await getBannerPresignedUrl(bannerFile.type || "image/jpeg", bannerFile.size);
         if ("error" in res) { setError(res.error); setSaving(false); return; }
         const up = await fetch(res.presignedUrl, {
@@ -229,7 +244,7 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
         username:        username        || null,
         bio:             bio             || null,
         avatarUrl:       avatarPreview   ?? user.avatarUrl,
-        bannerUrl:       bannerPreview   ?? user.bannerUrl,
+        bannerUrl:       bannerRemoved ? null : (bannerPreview ?? user.bannerUrl),
         telegramLink:    telegramLink    || null,
         vkLink:          vkLink          || null,
         yandexMusicLink: yandexMusicLink || null,
@@ -268,10 +283,12 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFilePick(f, "avatar"); }}
       />
-      <input ref={bannerInputRef} type="file" accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFilePick(f, "banner"); }}
-      />
+      {canChangeBanner && (
+        <input ref={bannerInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFilePick(f, "banner"); }}
+        />
+      )}
 
       {/* Backdrop */}
       <motion.div
@@ -292,19 +309,50 @@ export default function ProfileEditModal({ user, onClose, onSaved }: Props) {
 
           {/* ── Header: Banner + Avatar ──────────────────────────────────── */}
           <div className="relative">
-            <button type="button" onClick={() => bannerInputRef.current?.click()}
-              className="relative w-full h-32 bg-white/[0.04] overflow-hidden group cursor-pointer block focus:outline-none"
+            <button type="button"
+              onClick={() => canChangeBanner ? bannerInputRef.current?.click() : undefined}
+              disabled={!canChangeBanner}
+              className={`relative w-full h-32 bg-white/[0.04] overflow-hidden group block focus:outline-none
+                          ${canChangeBanner ? "cursor-pointer" : "cursor-default"}`}
             >
               {displayedBanner ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={displayedBanner} alt="" className="w-full h-full object-cover" />
+                <img src={displayedBanner} alt="" className={`w-full h-full object-cover${!canChangeBanner ? " opacity-50" : ""}`} />
               ) : (
-                <div className="w-full h-full bg-white/[0.03]" />
+                <div className={`w-full h-full bg-white/[0.03]${!canChangeBanner ? " opacity-50" : ""}`} />
               )}
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
-                <Camera size={30} strokeWidth={1.5} className="text-white/80" />
-              </div>
+              {canChangeBanner ? (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
+                  <Camera size={30} strokeWidth={1.5} className="text-white/80" />
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                  <Lock size={16} strokeWidth={1.5} className="text-white/20" />
+                </div>
+              )}
             </button>
+
+            {/* Reset button — top-right corner, only when banner exists and user can change it */}
+            {canChangeBanner && displayedBanner && (
+              <button
+                type="button"
+                onClick={handleRemoveBanner}
+                aria-label="Убрать фон"
+                className="absolute top-2 right-2 z-10 p-1.5
+                           bg-black/60 rounded-full border border-white/10
+                           text-white/50 hover:text-white/90 hover:bg-black/80
+                           transition-all duration-150 active:scale-95"
+              >
+                <Trash2 size={13} strokeWidth={1.5} />
+              </button>
+            )}
+            {/* PLUS / ARTIST gate hint */}
+            {!canChangeBanner && (
+              <p className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] text-white/30 pointer-events-none">
+                Фон профиля — только для{" "}
+                <span className="text-amber-400/50">Stillum PLUS</span>
+              </p>
+            )}
 
             <div className="absolute -bottom-10 left-6 z-10">
               <button type="button" onClick={() => avatarInputRef.current?.click()}

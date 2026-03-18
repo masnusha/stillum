@@ -5,6 +5,7 @@ import { Music } from "lucide-react";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import UserMenu from "@/app/dashboard/_components/UserMenu";
+import HomeTrackCard from "./_components/HomeTrackCard";
 
 export const dynamic = "force-dynamic";
 
@@ -59,11 +60,17 @@ export default async function HomePage() {
     orderBy: { createdAt: "desc" },
     take: 8,
     select: {
-      id:       true,
-      title:    true,
-      artist:   true,
-      coverUrl: true,
-      owner: { select: { username: true, name: true } },
+      id:            true,
+      title:         true,
+      artist:        true,
+      coverUrl:      true,
+      audioUrl:      true,
+      duration:      true,
+      ownerId:       true,
+      isExplicit:    true,
+      isPublic:      true,
+      allowComments: true,
+      owner: { select: { id: true, username: true, name: true, avatarUrl: true, image: true } },
     },
   });
 
@@ -118,26 +125,7 @@ export default async function HomePage() {
           {latestTracks.length > 0 && (
             <Section title="Недавно добавленное">
               {latestTracks.map((track) => (
-                <div key={track.id} className="w-40 md:w-44 shrink-0">
-
-                  {/* Cover */}
-                  <div className="w-full aspect-square rounded-xl bg-white/[0.04] border border-white/[0.05] overflow-hidden relative flex items-center justify-center mb-2.5">
-                    {track.coverUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={track.coverUrl}
-                        alt={track.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Music size={28} strokeWidth={1} className="text-white/15" />
-                    )}
-                  </div>
-
-                  <p className="text-[13px] font-medium text-white/80 truncate">{track.title}</p>
-                  <p className="text-[12px] text-white/40 truncate mt-0.5">{track.artist}</p>
-
-                </div>
+                <HomeTrackCard key={track.id} track={track} />
               ))}
             </Section>
           )}

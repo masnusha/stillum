@@ -4,6 +4,14 @@ import { create } from "zustand";
 
 export type RepeatMode = "off" | "all" | "one";
 
+export interface PlayerTrackUser {
+  id:        string;
+  username:  string | null;
+  name:      string | null;
+  avatarUrl: string | null;
+  image:     string | null;
+}
+
 export interface PlayerTrack {
   id:          string;
   title:       string;
@@ -11,8 +19,12 @@ export interface PlayerTrack {
   audioUrl:    string;
   coverUrl:    string | null;
   duration:    number;
-  isExplicit?: boolean;
+  isExplicit?:    boolean;
+  isPublic?:      boolean;
+  allowComments?: boolean;
   ownerId?:    string;
+  // Embedded owner profile — eliminates sidebar async fetch
+  user?:       PlayerTrackUser;
   // Optional metadata — populated when playing from own library
   genre?:       string | null;
   releaseDate?: string | null;
@@ -30,6 +42,12 @@ interface PlayerState {
   isPlaying:     boolean;
   volume:        number;
   repeatMode:    RepeatMode;
+  /** Controls visibility of the "Now Playing" details sidebar. */
+  isSidebarOpen:  boolean;
+  /** Current pixel width of the sidebar (user-resizable). */
+  sidebarWidth:   number;
+  /** True while the user is actively dragging the resize handle. */
+  isResizing:     boolean;
 
   // Actions
   /** Syncs the library list into the store (called from TrackList on mount). */
@@ -46,7 +64,12 @@ interface PlayerState {
   setVolume:        (volume: number) => void;
   toggleShuffle:    () => void;
   toggleRepeatMode: () => void;
-  stop:             () => void;
+  toggleSidebar:  () => void;
+  openSidebar:    () => void;
+  closeSidebar:   () => void;
+  setSidebarWidth:(width: number) => void;
+  setIsResizing:  (v: boolean) => void;
+  stop:           () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,6 +103,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying:     false,
   volume:        1,
   repeatMode:    "off",
+  isSidebarOpen: false,
+  sidebarWidth:  320,
+  isResizing:    false,
 
   // ── setQueue — called by TrackList when library changes ───────────────────
   setQueue: (tracks) =>
@@ -161,7 +187,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       };
     }),
 
-  togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
-  setVolume:  (v) => set({ volume: Math.max(0, Math.min(1, v)) }),
-  stop:       () => set({ isPlaying: false }),
+  togglePlay:     () => set((s) => ({ isPlaying: !s.isPlaying })),
+  setVolume:      (v) => set({ volume: Math.max(0, Math.min(1, v)) }),
+  toggleSidebar:  () => set((s) => ({ isSidebarOpen: !s.isSidebarOpen })),
+  openSidebar:    () => set({ isSidebarOpen: true }),
+  closeSidebar:   () => set({ isSidebarOpen: false }),
+  setSidebarWidth:(w) => set({ sidebarWidth: w }),
+  setIsResizing:  (v) => set({ isResizing: v }),
+  stop:           () => set({ isPlaying: false }),
 }));

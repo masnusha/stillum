@@ -6,7 +6,10 @@ import Link  from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
+import dynamic from "next/dynamic";
 import UserNameWithBadges from "@/components/ui/UserNameWithBadges";
+
+const NotificationBell = dynamic(() => import("@/components/NotificationBell"), { ssr: false });
 import {
   User,
   BadgeCheck,
@@ -114,6 +117,8 @@ export default function UserMenu() {
   function nav(href: string) { close(); router.push(href); }
 
   return (
+    <div className="flex items-center gap-5">
+    <NotificationBell />
     <div ref={ref} className="relative">
 
       {/* ── Trigger ── */}
@@ -166,17 +171,21 @@ export default function UserMenu() {
               label="Аккаунт"
               onClick={() => nav("/dashboard/account")}
             />
-            <MenuItem
-              icon={Sparkles}
-              label="Перейти на Plus"
-              onClick={close}
-              amber
-            />
-            <MenuItem
-              icon={Key}
-              label="Активировать код"
-              onClick={() => nav("/gift")}
-            />
+            {plan !== "PLUS" && (
+              <>
+                <MenuItem
+                  icon={Sparkles}
+                  label="Перейти на Plus"
+                  onClick={close}
+                  amber
+                />
+                <MenuItem
+                  icon={Key}
+                  label="Активировать код"
+                  onClick={() => nav("/gift")}
+                />
+              </>
+            )}
 
             <Divider />
 
@@ -219,6 +228,7 @@ export default function UserMenu() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </div>
   );
 }

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Play, Pause,
   SkipBack, SkipForward,
   Volume2, VolumeX,
   Shuffle, Repeat, Repeat1,
-  Check, ListMusic, Maximize2,
+  Check, ListMusic, Maximize2, PanelRight, Lock,
 } from "lucide-react";
+import { toast } from "sonner";
 import UpNextPanel from "./UpNextPanel";
 import ExpandedPlayer from "./ExpandedPlayer";
 import { usePlayerStore } from "@/store/usePlayerStore";
@@ -50,8 +53,8 @@ export default function Player({ userId }: PlayerProps) {
   const volumeRef  = useRef<HTMLDivElement>(null);
 
   const { currentTrack, isPlaying, volume, queue, repeatMode, isShuffle,
-          togglePlay, setVolume, stop, playNext, playPrevious,
-          toggleRepeatMode, toggleShuffle, playFromQueue } =
+          isSidebarOpen, togglePlay, setVolume, stop, playNext, playPrevious,
+          toggleRepeatMode, toggleShuffle, toggleSidebar, playFromQueue } =
     usePlayerStore();
 
   const [currentTime, setCurrentTime] = useState(0);
@@ -79,11 +82,22 @@ export default function Player({ userId }: PlayerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // ── Audio quality ────────────────────────────────────────────────────────────
-  const [audioQuality,    setAudioQuality]    = useState<AudioQuality>("Original");
+  const { data: session } = useSession();
+  const isPlus = session?.user?.plan === "PLUS";
+
+  const [audioQuality,    setAudioQuality]    = useState<AudioQuality>("Standard");
   const [isQualityOpen,   setIsQualityOpen]   = useState(false);
   const [toastMsg,        setToastMsg]        = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qualityMenuRef = useRef<HTMLDivElement>(null);
+
+  // Once session loads: default Plus users to Original, lock Free users to Standard.
+  useEffect(() => {
+    if (session) {
+      setAudioQuality(isPlus ? "Original" : "Standard");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.plan]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -91,7 +105,14 @@ export default function Player({ userId }: PlayerProps) {
     toastTimer.current = setTimeout(() => setToastMsg(null), 3500);
   };
 
+  const PLUS_ONLY: AudioQuality[] = ["Original", "High"];
+
   const handleSelectQuality = (q: AudioQuality) => {
+    if (!isPlus && PLUS_ONLY.includes(q)) {
+      toast("Доступно только с подпиской Stillum PLUS", { icon: "🔒" });
+      setIsQualityOpen(false);
+      return;
+    }
     setAudioQuality(q);
     setIsQualityOpen(false);
     if (q !== "Original") {
@@ -291,7 +312,17 @@ export default function Player({ userId }: PlayerProps) {
               {currentTrack ? (
                 <>
                   <p className="text-[12px] font-medium text-white/80 truncate leading-tight">{currentTrack.title}</p>
-                  <p className="text-[11px] text-white/30 truncate mt-0.5">{currentTrack.artist}</p>
+                  {currentTrack.ownerId ? (
+                    <Link
+                      href={`/dashboard/profile/${currentTrack.ownerId}`}
+                      className="text-[11px] text-white/30 hover:text-white/60 truncate mt-0.5 transition-colors block"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {currentTrack.artist}
+                    </Link>
+                  ) : (
+                    <p className="text-[11px] text-white/30 truncate mt-0.5">{currentTrack.artist}</p>
+                  )}
                 </>
               ) : (
                 <>
@@ -381,7 +412,7 @@ export default function Player({ userId }: PlayerProps) {
             <div className="w-full max-w-sm flex items-center gap-2.5">
 
               {/* Current time */}
-              <span className="text-[10px] font-mono text-white/35 tabular-nums w-7 text-right shrink-0 select-none">
+              <span className="w-10 text-[10px] font-mono font-medium tracking-wider text-white/40 tabular-nums text-right shrink-0 select-none">
                 {fmt(displayTime)}
               </span>
 
@@ -432,7 +463,7 @@ export default function Player({ userId }: PlayerProps) {
               </div>
 
               {/* Total duration */}
-              <span className="text-[10px] font-mono text-white/35 tabular-nums w-7 shrink-0 select-none">
+              <span className="w-10 text-[10px] font-mono font-medium tracking-wider text-white/40 tabular-nums text-left shrink-0 select-none">
                 {fmt(duration)}
               </span>
 
@@ -453,6 +484,21 @@ export default function Player({ userId }: PlayerProps) {
                 }`}
             >
               <ListMusic size={13} strokeWidth={1.5} />
+            </button>
+
+            {/* Now Playing sidebar toggle */}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label="Now Playing details"
+              disabled={!currentTrack}
+              className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-150 disabled:opacity-20 disabled:cursor-not-allowed
+                ${isSidebarOpen
+                  ? "bg-white/[0.1] text-white/90"
+                  : "text-white/35 hover:text-white/70"
+                }`}
+            >
+              <PanelRight size={13} strokeWidth={1.5} />
             </button>
 
             {/* Quality selector */}
@@ -491,26 +537,36 @@ export default function Player({ userId }: PlayerProps) {
 
                     {/* Options */}
                     <div className="py-1">
-                      {QUALITY_OPTIONS.map(({ value, label, sub }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => handleSelectQuality(value)}
-                          className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 hover:bg-white/[0.07] transition-colors duration-100"
-                        >
-                          <span>
-                            <span className="block text-[12px] text-white/75 leading-tight">
-                              {label}
+                      {QUALITY_OPTIONS.map(({ value, label, sub }) => {
+                        const locked = !isPlus && PLUS_ONLY.includes(value);
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => handleSelectQuality(value)}
+                            className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors duration-100
+                              ${locked
+                                ? "opacity-50 hover:bg-white/[0.04]"
+                                : "hover:bg-white/[0.07]"
+                              }`}
+                          >
+                            <span>
+                              <span className="block text-[12px] text-white/75 leading-tight">
+                                {label}
+                              </span>
+                              <span className="block text-[10px] text-white/30 mt-0.5">
+                                {sub}
+                              </span>
                             </span>
-                            <span className="block text-[10px] text-white/30 mt-0.5">
-                              {sub}
-                            </span>
-                          </span>
-                          {audioQuality === value && (
-                            <Check size={12} strokeWidth={2} className="text-white/60 shrink-0" />
-                          )}
-                        </button>
-                      ))}
+                            {locked
+                              ? <Lock size={11} strokeWidth={1.5} className="text-white/35 shrink-0" />
+                              : audioQuality === value
+                                ? <Check size={12} strokeWidth={2} className="text-white/60 shrink-0" />
+                                : null
+                            }
+                          </button>
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}

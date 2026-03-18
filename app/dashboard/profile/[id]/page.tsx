@@ -110,8 +110,9 @@ export default async function ProfilePage({
           releaseDate: true,
           recordLabel: true,
           buyLink:     true,
-          isExplicit:  true,
-          isPublic:    true,
+          isExplicit:    true,
+          isPublic:      true,
+          allowComments: true,
           duration:    true,
           coverUrl:    true,
           audioUrl:    true,
@@ -146,9 +147,10 @@ export default async function ProfilePage({
 
   const isFollowing = !!followRow;
 
-  const displayName = user.username ?? user.name ?? id.slice(0, 8);
-  const avatar      = user.avatarUrl ?? user.image;
-  const banner      = user.bannerUrl;
+  const displayName       = user.username ?? user.name ?? id.slice(0, 8);
+  const avatar            = user.avatarUrl ?? user.image;
+  const hasPremiumFeatures = user.plan === "PLUS" || user.role === "ARTIST";
+  const banner            = hasPremiumFeatures ? user.bannerUrl : null;
   const initials    = displayName.split(" ").map((w) => w[0] ?? "").filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
 
   return (

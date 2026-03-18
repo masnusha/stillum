@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -202,9 +203,18 @@ export default function ExpandedPlayer({
                   </span>
                 )}
               </div>
-              <p className="text-[15px] text-white/45 truncate">
-                {currentTrack?.artist ?? ""}
-              </p>
+              {currentTrack?.ownerId ? (
+                <Link
+                  href={`/dashboard/profile/${currentTrack.ownerId}`}
+                  className="text-[15px] text-white/45 hover:text-white/70 truncate transition-colors"
+                >
+                  {currentTrack.artist}
+                </Link>
+              ) : (
+                <p className="text-[15px] text-white/45 truncate">
+                  {currentTrack?.artist ?? ""}
+                </p>
+              )}
             </div>
 
             {/* Right — context menu */}
@@ -219,7 +229,9 @@ export default function ExpandedPlayer({
                     artist:      currentTrack.artist,
                     audioUrl:    currentTrack.audioUrl,
                     coverUrl:    currentTrack.coverUrl,
-                    isExplicit:  currentTrack.isExplicit ?? false,
+                    isExplicit:    currentTrack.isExplicit    ?? false,
+                    isPublic:      currentTrack.isPublic      ?? false,
+                    allowComments: currentTrack.allowComments ?? true,
                     genre:       currentTrack.genre ?? null,
                     releaseDate: currentTrack.releaseDate ?? null,
                     recordLabel: currentTrack.recordLabel ?? null,

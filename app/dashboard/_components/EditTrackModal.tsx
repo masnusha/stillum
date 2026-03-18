@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ImagePlus, ChevronDown, Pencil, Lock, Globe } from "lucide-react";
+import { X, ImagePlus, ChevronDown, Pencil, Lock, Globe, MessageSquare } from "lucide-react";
 import type { TrackMetadata } from "@/app/actions/track";
 import { getImagePresignedUrl, updateTrack } from "@/app/actions/track";
 import { usePlayerStore } from "@/store/usePlayerStore";
@@ -24,13 +24,13 @@ const GENRES = [
 export interface TrackForEdit {
   id: string;
   title: string;
-  artist: string;
   genre: string | null;
   releaseDate: string | null;
   recordLabel: string | null;
   buyLink: string | null;
-  isExplicit: boolean;
-  isPublic:   boolean;
+  isExplicit:    boolean;
+  isPublic:      boolean;
+  allowComments: boolean;
   coverUrl: string | null;
 }
 
@@ -48,15 +48,24 @@ interface FieldProps {
   placeholder: string;
   required?: boolean;
   maxLength?: number;
+  showCounter?: boolean;
 }
 
-function Field({ label, value, onChange, placeholder, required, maxLength = 200 }: FieldProps) {
+function Field({ label, value, onChange, placeholder, required, maxLength = 200, showCounter }: FieldProps) {
+  const tooLong = showCounter && maxLength < 500 && value.length > maxLength;
   return (
     <div className="space-y-1.5">
-      <label className="block text-[10px] font-medium tracking-widest uppercase text-white/25">
-        {label}
-        {required && <span className="text-white/35 ml-0.5">*</span>}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="block text-[10px] font-medium tracking-widest uppercase text-white/25">
+          {label}
+          {required && <span className="text-white/35 ml-0.5">*</span>}
+        </label>
+        {showCounter && (
+          <span className={`text-[10px] tabular-nums ${tooLong ? "text-red-400/70" : "text-white/20"}`}>
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
       <input
         type="text"
         value={value}
@@ -65,7 +74,8 @@ function Field({ label, value, onChange, placeholder, required, maxLength = 200 
         required={required}
         maxLength={maxLength}
         autoComplete="off"
-        className="w-full bg-white/[0.02] border border-white/[0.05] focus:border-white/[0.2] focus:bg-white/[0.05] transition-all duration-200 rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder-white/20 outline-none"
+        className={`w-full bg-white/[0.02] border focus:bg-white/[0.05] transition-all duration-200 rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder-white/20 outline-none
+          ${tooLong ? "border-red-400/40 focus:border-red-400/60" : "border-white/[0.05] focus:border-white/[0.2]"}`}
       />
     </div>
   );
@@ -272,18 +282,53 @@ function PrivacyToggle({ checked, onChange }: { checked: boolean; onChange: (v: 
   );
 }
 
+// ─── CommentsToggle ───────────────────────────────────────────────────────────
+
+function CommentsToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between w-full px-4 py-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+      <div className="flex items-center gap-3">
+        <MessageSquare
+          size={16}
+          strokeWidth={1.5}
+          className={`shrink-0 transition-colors duration-200 ${checked ? "text-white/50" : "text-white/20"}`}
+        />
+        <div>
+          <p className="text-[13px] text-white/65 leading-tight">Разрешить комментарии</p>
+          <p className="text-[11px] text-white/30 mt-0.5 leading-relaxed">
+            Слушатели смогут оставлять отзывы и реакции под вашим треком.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className="shrink-0 ml-4 relative w-9 h-5 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+        style={{ background: checked ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.07)" }}
+      >
+        <span
+          className="absolute top-[3px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-200"
+          style={{ left: checked ? "calc(100% - 17px)" : "3px" }}
+        />
+      </button>
+    </div>
+  );
+}
+
 // ─── EditTrackModal ───────────────────────────────────────────────────────────
 
 export default function EditTrackModal({ track, onClose }: Props) {
   const { updateTrackInStore } = usePlayerStore();
   const [title,       setTitle]       = useState(track.title);
-  const [artist,      setArtist]      = useState(track.artist);
   const [genre,       setGenre]       = useState(track.genre ?? "");
   const [releaseDate, setReleaseDate] = useState(toDisplayDate(track.releaseDate));
   const [recordLabel, setRecordLabel] = useState(track.recordLabel ?? "");
   const [buyLink,     setBuyLink]     = useState(track.buyLink ?? "");
-  const [isExplicit,  setIsExplicit]  = useState(track.isExplicit);
-  const [isPublic,    setIsPublic]    = useState(track.isPublic);
+  const [isExplicit,    setIsExplicit]    = useState(track.isExplicit);
+  const [isPublic,      setIsPublic]      = useState(track.isPublic);
+  const [allowComments, setAllowComments] = useState(track.allowComments);
 
   // ── Cover state ──────────────────────────────────────────────────────────────
   // coverDisplayUrl: what to show in the picker (existing URL or new blob URL)
@@ -346,7 +391,8 @@ export default function EditTrackModal({ track, onClose }: Props) {
     if (track.coverUrl) setCoverRemoved(true);
   };
 
-  const canSubmit = title.trim().length > 0 && artist.trim().length > 0 && !isSaving;
+  const titleTrimmed = title.trim();
+  const canSubmit    = titleTrimmed.length > 0 && titleTrimmed.length <= 50 && !isSaving;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -357,13 +403,13 @@ export default function EditTrackModal({ track, onClose }: Props) {
 
     const metadata: TrackMetadata = {
       title:       title.trim(),
-      artist:      artist.trim(),
       genre:       genre       || undefined,
       releaseDate: releaseDate.trim() ? toIsoDate(releaseDate.trim()) : undefined,
       recordLabel: recordLabel.trim() || undefined,
       buyLink:     buyLink.trim()     || undefined,
       isExplicit,
       isPublic,
+      allowComments,
     };
 
     try {
@@ -411,7 +457,6 @@ export default function EditTrackModal({ track, onClose }: Props) {
       updateTrackInStore({
         id:          track.id,
         title:       metadata.title,
-        artist:      metadata.artist,
         genre:       metadata.genre       ?? null,
         releaseDate: metadata.releaseDate ?? null,
         recordLabel: metadata.recordLabel ?? null,
@@ -518,8 +563,7 @@ export default function EditTrackModal({ track, onClose }: Props) {
                   </div>
 
                   <div className="flex-1 space-y-3">
-                    <Field label="Title"  value={title}  onChange={setTitle}  placeholder="Track title"  required />
-                    <Field label="Artist" value={artist} onChange={setArtist} placeholder="Artist name" required />
+                    <Field label="Title" value={title} onChange={setTitle} placeholder="Track title" required maxLength={50} showCounter />
                   </div>
                 </div>
 
@@ -538,8 +582,9 @@ export default function EditTrackModal({ track, onClose }: Props) {
 
                   <Field label="Record Label" value={recordLabel} onChange={setRecordLabel} placeholder="e.g. XL Recordings" />
                   <Field label="Buy Link"     value={buyLink}     onChange={setBuyLink}     placeholder="https://…" maxLength={500} />
-                  <ExplicitCheckbox checked={isExplicit} onChange={setIsExplicit} />
-                  <PrivacyToggle    checked={isPublic}   onChange={setIsPublic}   />
+                  <ExplicitCheckbox checked={isExplicit}    onChange={setIsExplicit}    />
+                  <PrivacyToggle    checked={isPublic}     onChange={setIsPublic}     />
+                  <CommentsToggle   checked={allowComments} onChange={setAllowComments} />
                 </div>
 
                 {/* Error */}

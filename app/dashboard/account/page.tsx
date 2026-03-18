@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import {
   User,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   ChevronRight,
   Sparkles,
   CheckCircle2,
+  Check,
 } from "lucide-react";
 import UserMenu from "@/app/dashboard/_components/UserMenu";
 
@@ -60,7 +62,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 export default async function AccountPage() {
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
+  if (!session?.user?.id) redirect("/login");
+
+  const dbUser = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { plan: true },
+  });
+  const isPlus = dbUser?.plan === "PLUS";
 
   return (
     <div className="flex flex-col h-full min-h-full">
@@ -76,66 +84,86 @@ export default async function AccountPage() {
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <h1 className="text-3xl font-bold text-white mb-10">Обзор аккаунта</h1>
 
-      {/* ── Plan cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-
-        {/* Current plan */}
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
-          <p className="text-sm text-white/50 mb-2">Ваш тариф</p>
-          <p className="text-2xl font-bold text-white mb-5">Stillum Base</p>
-          <ul className="space-y-2.5">
-            {[
-              "Стандартное качество (320 kbps)",
-              "Публикация треков",
-              "Персональная библиотека",
-            ].map((feat) => (
-              <li key={feat} className="flex items-center gap-2.5 text-[13px] text-white/50">
-                <CheckCircle2
-                  size={14}
-                  strokeWidth={1.5}
-                  className="text-white/20 shrink-0"
-                />
-                {feat}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Stillum Plus promo */}
-        <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden group">
-          {/* Glow blob */}
-          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles size={16} strokeWidth={1.5} className="text-indigo-300/70" />
-            <p className="text-2xl font-bold text-white">Stillum Plus</p>
+      {/* ── Plan card ─────────────────────────────────────────────────────── */}
+      <div className="mb-12">
+        {isPlus ? (
+          /* ── PLUS: full-width active card ── */
+          <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+            <p className="text-sm text-white/50 uppercase tracking-widest mb-2">Ваш тариф</p>
+            <p className="text-2xl font-bold text-white mb-2">Stillum Plus</p>
+            <p className="text-sm text-white/50 leading-relaxed mb-4">
+              Lossless качество, расширенная статистика и эксклюзивные функции.
+            </p>
+            <ul className="space-y-2.5 mb-6">
+              {[
+                "Lossless / Hi-Res Audio (FLAC)",
+                "Расширенная аналитика треков",
+                "Приоритетная поддержка",
+              ].map((feat) => (
+                <li key={feat} className="flex items-center gap-2.5 text-[13px] text-white/60">
+                  <CheckCircle2 size={14} strokeWidth={1.5} className="text-indigo-400/60 shrink-0" />
+                  {feat}
+                </li>
+              ))}
+            </ul>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/5">
+              <Check size={14} strokeWidth={2} className="text-white" />
+              <span className="text-sm font-medium text-white">Активен</span>
+            </div>
           </div>
-          <p className="text-sm text-white/50 leading-relaxed">
-            Lossless качество, расширенная статистика и эксклюзивные функции.
-          </p>
-          <ul className="mt-4 space-y-2.5 mb-6">
-            {[
-              "Lossless / Hi-Res Audio (FLAC)",
-              "Расширенная аналитика треков",
-              "Приоритетная поддержка",
-            ].map((feat) => (
-              <li key={feat} className="flex items-center gap-2.5 text-[13px] text-white/60">
-                <CheckCircle2
-                  size={14}
-                  strokeWidth={1.5}
-                  className="text-indigo-400/60 shrink-0"
-                />
-                {feat}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="px-6 py-2.5 bg-white text-black text-sm font-semibold rounded-xl hover:scale-105 active:scale-[0.98] transition-transform"
-          >
-            Перейти на Plus
-          </button>
-        </div>
+        ) : (
+          /* ── FREE: current plan + upsell grid ── */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Current plan */}
+            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
+              <p className="text-sm text-white/50 mb-2">Ваш тариф</p>
+              <p className="text-2xl font-bold text-white mb-5">Stillum Free</p>
+              <ul className="space-y-2.5">
+                {[
+                  "Стандартное качество (320 kbps)",
+                  "Публикация треков",
+                  "Персональная библиотека",
+                ].map((feat) => (
+                  <li key={feat} className="flex items-center gap-2.5 text-[13px] text-white/50">
+                    <CheckCircle2 size={14} strokeWidth={1.5} className="text-white/20 shrink-0" />
+                    {feat}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Stillum Plus promo */}
+            <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden group">
+              <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={16} strokeWidth={1.5} className="text-indigo-300/70" />
+                <p className="text-2xl font-bold text-white">Stillum Plus</p>
+              </div>
+              <p className="text-sm text-white/50 leading-relaxed">
+                Lossless качество, расширенная статистика и эксклюзивные функции.
+              </p>
+              <ul className="mt-4 space-y-2.5 mb-6">
+                {[
+                  "Lossless / Hi-Res Audio (FLAC)",
+                  "Расширенная аналитика треков",
+                  "Приоритетная поддержка",
+                ].map((feat) => (
+                  <li key={feat} className="flex items-center gap-2.5 text-[13px] text-white/60">
+                    <CheckCircle2 size={14} strokeWidth={1.5} className="text-indigo-400/60 shrink-0" />
+                    {feat}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="px-6 py-2.5 bg-white text-black text-sm font-semibold rounded-xl hover:scale-105 active:scale-[0.98] transition-transform"
+              >
+                Перейти на Plus
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Section: Аккаунт ──────────────────────────────────────────────── */}

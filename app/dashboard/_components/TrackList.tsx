@@ -16,10 +16,19 @@ export interface TrackRowData {
   recordLabel: string | null;
   buyLink:     string | null;
   isExplicit:  boolean;
-  isPublic:    boolean;
+  isPublic:      boolean;
+  allowComments: boolean;
   duration:    number;
   coverUrl:    string | null;
   audioUrl:    string;
+  ownerId?:    string;
+  user?: {
+    id:        string;
+    username:  string | null;
+    name:      string | null;
+    avatarUrl: string | null;
+    image:     string | null;
+  };
 }
 
 interface Props {
@@ -79,7 +88,10 @@ export default function TrackList({ tracks, playlistId }: Props) {
     coverUrl:    t.coverUrl,
     duration:    t.duration,
     isExplicit:  t.isExplicit,
-    isPublic:    t.isPublic,
+    isPublic:      t.isPublic,
+    allowComments: t.allowComments,
+    ownerId:     t.ownerId,
+    user:        t.user,
     genre:       t.genre,
     releaseDate: t.releaseDate,
     recordLabel: t.recordLabel,
@@ -291,8 +303,9 @@ export default function TrackList({ tracks, playlistId }: Props) {
                       releaseDate: track.releaseDate,
                       recordLabel: track.recordLabel,
                       buyLink:     track.buyLink,
-                      isExplicit:  track.isExplicit,
-                      isPublic:    track.isPublic,
+                      isExplicit:    track.isExplicit,
+                      isPublic:      track.isPublic,
+                      allowComments: track.allowComments,
                       coverUrl:    track.coverUrl,
                       audioUrl:    track.audioUrl,
                     }}

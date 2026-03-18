@@ -14,14 +14,36 @@ export async function followUser(targetId: string): Promise<void> {
   const me = session.user.id;
   if (me === targetId) return; // cannot follow yourself
 
-  // Upsert — safe if already following (no duplicate key error)
-  await prisma.follow.upsert({
-    where:  { followerId_followingId: { followerId: me, followingId: targetId } },
-    create: { followerId: me, followingId: targetId },
-    update: {}, // no-op if row already exists
+  // Check if already following — skip if row exists (upsert handles DB, but we
+  // use the result to decide whether to create a notification)
+  const existing = await prisma.follow.findUnique({
+    where: { followerId_followingId: { followerId: me, followingId: targetId } },
   });
 
+  if (!existing) {
+    // New follow — create Follow row, then handle FOLLOW notification
+    await prisma.follow.create({ data: { followerId: me, followingId: targetId } });
+
+    // Anti-spam: reuse existing FOLLOW notification (re-follow → mark unread again)
+    const existingNotif = await prisma.notification.findFirst({
+      where: { userId: targetId, issuerId: me, type: "FOLLOW" },
+      select: { id: true },
+    });
+
+    if (existingNotif) {
+      await prisma.notification.update({
+        where: { id: existingNotif.id },
+        data:  { isRead: false, createdAt: new Date() },
+      });
+    } else {
+      await prisma.notification.create({
+        data: { userId: targetId, issuerId: me, type: "FOLLOW", isRead: false },
+      });
+    }
+  }
+
   revalidatePath(`/dashboard/profile/${targetId}`);
+  revalidatePath("/dashboard");
 }
 
 // ─── unfollowUser ─────────────────────────────────────────────────────────────

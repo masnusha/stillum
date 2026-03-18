@@ -13,17 +13,20 @@ export const dynamic = "force-dynamic";
 
 const TRACK_SELECT = {
   id:          true,
+  ownerId:     true,
   title:       true,
   artist:      true,
   coverUrl:    true,
   audioUrl:    true,
   duration:    true,
   isExplicit:  true,
-  isPublic:    true,
+  isPublic:      true,
+  allowComments: true,
   genre:       true,
   releaseDate: true,
   recordLabel: true,
   buyLink:     true,
+  owner: { select: { id: true, username: true, name: true, avatarUrl: true, image: true } },
 } as const;
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -142,7 +145,7 @@ export default async function NewPage() {
               <p className="text-white/40">Здесь скоро появятся новые треки</p>
             </div>
           ) : (
-            <NewTracksGrid tracks={latestTracks} />
+            <NewTracksGrid tracks={latestTracks.map(({ owner, ...rest }) => ({ ...rest, user: owner }))} />
           )}
         </div>
 

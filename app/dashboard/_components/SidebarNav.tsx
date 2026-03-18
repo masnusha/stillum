@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, Home, Sparkles, Radio, Library, ListMusic, Users } from "lucide-react";
+import { Search, Home, Sparkles, Radio, Library, ListMusic, Users, Mic2 } from "lucide-react";
 
 const GLOBAL_NAV = [
   { href: "/dashboard/search", label: "Поиск",     icon: Search   },
@@ -54,7 +54,7 @@ function NavLink({
 
 // ─── SidebarNav ───────────────────────────────────────────────────────────────
 
-export default function SidebarNav() {
+export default function SidebarNav({ role }: { role?: string }) {
   const pathname = usePathname();
 
   return (
@@ -70,6 +70,16 @@ export default function SidebarNav() {
           active={pathname === href}
         />
       ))}
+
+      {/* ── Студия — ARTIST only, bottom of global block ─────────────────── */}
+      {role === "ARTIST" && (
+        <NavLink
+          href="/dashboard/studio"
+          label="Студия"
+          icon={Mic2}
+          active={pathname.startsWith("/dashboard/studio")}
+        />
+      )}
 
       {/* ── Section label: Медиатека ──────────────────────────────────────── */}
       <div className="mt-7 mb-2 px-3">

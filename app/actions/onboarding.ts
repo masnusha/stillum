@@ -15,7 +15,6 @@ export interface OnboardingData {
   username:  string;
   bio:       string;
   avatarUrl: string | null;
-  bannerUrl: string | null;
 }
 
 // ─── getImageUploadUrl ────────────────────────────────────────────────────────
@@ -83,7 +82,7 @@ export async function completeOnboarding(
       username,
       bio:       data.bio.trim() || null,
       avatarUrl: data.avatarUrl || null,
-      bannerUrl: data.bannerUrl || null,
+      bannerUrl: null,
     },
   });
 
